@@ -14,7 +14,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.context.event.EventListener;
 
+/**
+ * Core Temporal infrastructure configuration.
+ *
+ * <p>Creates the {@link WorkflowServiceStubs}, {@link WorkflowClient},
+ * and {@link WorkerFactory} beans. The factory is NOT started here —
+ * it starts after all workers have been registered (via ContextRefreshedEvent).
+ */
 @Configuration
 public class TemporalConfig {
 
@@ -43,12 +52,26 @@ public class TemporalConfig {
     @Bean
     public WorkerFactory workerFactory(WorkflowClient client) {
         factory = WorkerFactory.newInstance(client);
-        Worker worker = factory.newWorker(HealthCheckConstants.TASK_QUEUE);
-        worker.registerWorkflowImplementationTypes(HealthCheckWorkflowImpl.class);
-        worker.registerActivitiesImplementations(new HealthCheckActivitiesImpl());
-        factory.start();
-        logger.info("Temporal Worker started. Listening on task queue: {}", HealthCheckConstants.TASK_QUEUE);
+
+        // Register health-check worker
+        Worker healthCheckWorker = factory.newWorker(HealthCheckConstants.TASK_QUEUE);
+        healthCheckWorker.registerWorkflowImplementationTypes(HealthCheckWorkflowImpl.class);
+        healthCheckWorker.registerActivitiesImplementations(new HealthCheckActivitiesImpl());
+        logger.info("Health-check Worker registered on task queue: {}", HealthCheckConstants.TASK_QUEUE);
+
+        // NOTE: factory.start() is called in onContextRefreshed() after ALL workers are registered
         return factory;
+    }
+
+    /**
+     * Start the WorkerFactory after all beans (including engine workers) are initialized.
+     */
+    @EventListener(ContextRefreshedEvent.class)
+    public void onContextRefreshed() {
+        if (factory != null) {
+            factory.start();
+            logger.info("All Temporal Workers started.");
+        }
     }
 
     @PreDestroy
