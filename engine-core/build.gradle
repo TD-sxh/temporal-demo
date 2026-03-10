@@ -1,0 +1,15 @@
+plugins {
+    id 'java-library'
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+}
+
+tasks.named('jar') {
+    enabled = false
+}
+
+dependencies {
+    api project(':engine-model')
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation "io.temporal:temporal-sdk:1.24.1"
+}

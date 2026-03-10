@@ -1,0 +1,16 @@
+plugins {
+    id 'java-library'
+    id 'io.spring.dependency-management'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.boot:spring-boot-dependencies:4.0.3"
+    }
+}
+
+dependencies {
+    api "io.temporal:temporal-sdk:1.24.1"
+    api 'org.springframework:spring-expression'
+    implementation 'org.slf4j:slf4j-api'
+}
