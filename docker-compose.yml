@@ -39,3 +39,39 @@ services:
       TEMPORAL_CORS_ORIGINS: http://localhost:8080
     ports:
       - "8080:8080"
+
+  engine-api:
+    build:
+      context: .
+      dockerfile: engine-api/Dockerfile
+    container_name: engine-api
+    depends_on:
+      - temporal-server
+      - temporal-db
+    environment:
+      TEMPORAL_SERVER_TARGET: temporal-server:7233
+      SPRING_DATASOURCE_URL: jdbc:postgresql://temporal-db:5432/engine
+      SPRING_DATASOURCE_USERNAME: temporal
+      SPRING_DATASOURCE_PASSWORD: temporal
+    ports:
+      - "8081:8081"
+
+  engine-core:
+    build:
+      context: .
+      dockerfile: engine-core/Dockerfile
+    container_name: engine-core
+    depends_on:
+      - temporal-server
+    environment:
+      TEMPORAL_SERVER_TARGET: temporal-server:7233
+
+  health-check-worker:
+    build:
+      context: .
+      dockerfile: health-check-worker/Dockerfile
+    container_name: health-check-worker
+    depends_on:
+      - temporal-server
+    environment:
+      TEMPORAL_SERVER_TARGET: temporal-server:7233
