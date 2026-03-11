@@ -1,40 +1,40 @@
-# Workflow Definition API 接口文档
+# Workflow Definition API Documentation
 
 **Base URL:** `/api/definitions`
 
-## 数据模型
+## Data Model
 
 ### WorkflowDefinitionEntity
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | Long | 数据库主键（自增） |
-| `type` | String | 工作流类型标识，如 `health-check-flow`（最大128字符） |
-| `name` | String | 可读名称（最大256字符） |
-| `version` | Integer | 版本号（同一 type 下自增，type+version 唯一） |
-| `status` | Enum | 状态：`DRAFT` / `PUBLISHED` / `ARCHIVED` |
-| `definitionJson` | String(TEXT) | 完整的工作流 JSON 定义 |
-| `description` | String(TEXT) | 可选描述 |
-| `createdAt` | DateTime | 创建时间 |
-| `updatedAt` | DateTime | 最后更新时间 |
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | Long | Database primary key (auto-increment) |
+| `type` | String | Workflow type identifier, e.g. `health-check-flow` (max 128 chars) |
+| `name` | String | Human-readable name (max 256 chars) |
+| `version` | Integer | Version number (auto-incremented per type; type+version is unique) |
+| `status` | Enum | Status: `DRAFT` / `PUBLISHED` / `ARCHIVED` |
+| `definitionJson` | String(TEXT) | Complete workflow JSON definition |
+| `description` | String(TEXT) | Optional description |
+| `createdAt` | DateTime | Creation time |
+| `updatedAt` | DateTime | Last update time |
 
-### 状态生命周期
+### Status Lifecycle
 
 ```
 DRAFT → PUBLISHED → ARCHIVED
 ```
 
-- **DRAFT** — 草稿，可编辑/删除，不可被工作流引擎启动
-- **PUBLISHED** — 已发布，可被引擎启动（同 type 取最新 PUBLISHED 版本）
-- **ARCHIVED** — 已归档，不可再被启动
+- **DRAFT** — Draft, can be edited/deleted, cannot be used to start workflows
+- **PUBLISHED** — Published, can be used to start workflows (latest PUBLISHED version per type is preferred)
+- **ARCHIVED** — Archived, cannot be used to start new workflows
 
 ---
 
-## 接口列表
+## API Endpoints
 
-### 1. 创建工作流定义
+### 1. Create Workflow Definition
 
-创建指定 type 的新版本（初始状态为 DRAFT），版本号自动递增。
+Create a new version for the specified type (initial status: DRAFT). Version number is auto-incremented.
 
 ```
 POST /api/definitions
@@ -46,19 +46,19 @@ POST /api/definitions
 {
   "type": "health-check-flow",
   "name": "Health Check Workflow",
-  "definitionJson": "{ ... 完整 JSON 定义 ... }",
+  "definitionJson": "{ ... full JSON definition ... }",
   "description": "Initial version"
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `type` | String | 是 | 工作流类型标识 |
-| `name` | String | 否 | 可读名称 |
-| `definitionJson` | String / Object | 是 | 工作流 JSON 定义（支持字符串或嵌套 JSON 对象） |
-| `description` | String | 否 | 描述信息 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type` | String | Yes | Workflow type identifier |
+| `name` | String | No | Human-readable name |
+| `definitionJson` | String / Object | Yes | Workflow JSON definition (supports string or nested JSON object) |
+| `description` | String | No | Description |
 
-**成功响应:** `201 Created`
+**Success Response:** `201 Created`
 
 ```json
 {
@@ -73,7 +73,7 @@ POST /api/definitions
 }
 ```
 
-**错误响应:** `400 Bad Request`
+**Error Responses:** `400 Bad Request`
 
 ```json
 { "error": "type is required" }
@@ -87,13 +87,13 @@ POST /api/definitions
 
 ---
 
-### 2. 查询所有工作流类型（每种取最新版本）
+### 2. List All Workflow Types (latest version each)
 
 ```
 GET /api/definitions
 ```
 
-**成功响应:** `200 OK`
+**Success Response:** `200 OK`
 
 ```json
 [
@@ -122,13 +122,13 @@ GET /api/definitions
 
 ---
 
-### 3. 查询所有类型名称
+### 3. List All Type Names
 
 ```
 GET /api/definitions/types
 ```
 
-**成功响应:** `200 OK`
+**Success Response:** `200 OK`
 
 ```json
 ["health-check-flow", "order-flow", "approval-flow"]
@@ -136,19 +136,19 @@ GET /api/definitions/types
 
 ---
 
-### 4. 查询指定类型的所有版本
+### 4. List All Versions of a Type
 
 ```
 GET /api/definitions/{type}
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `type` | String | 工作流类型标识 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `type` | String | Workflow type identifier |
 
-**示例:** `GET /api/definitions/health-check-flow`
+**Example:** `GET /api/definitions/health-check-flow`
 
-**成功响应:** `200 OK`（按版本倒序排列）
+**Success Response:** `200 OK` (sorted by version descending)
 
 ```json
 [
@@ -187,20 +187,20 @@ GET /api/definitions/{type}
 
 ---
 
-### 5. 查询指定类型的指定版本
+### 5. Get Specific Version of a Type
 
 ```
 GET /api/definitions/{type}/{version}
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `type` | String | 工作流类型标识 |
-| `version` | Integer | 版本号 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `type` | String | Workflow type identifier |
+| `version` | Integer | Version number |
 
-**示例:** `GET /api/definitions/health-check-flow/2`
+**Example:** `GET /api/definitions/health-check-flow/2`
 
-**成功响应:** `200 OK`（包含完整 definitionJson）
+**Success Response:** `200 OK` (includes full definitionJson)
 
 ```json
 {
@@ -212,61 +212,61 @@ GET /api/definitions/{type}/{version}
   "description": "Production version",
   "createdAt": "2026-03-09T10:00:00",
   "updatedAt": "2026-03-09T15:00:00",
-  "definitionJson": "{ ... 完整 JSON ... }"
+  "definitionJson": "{ ... full JSON ... }"
 }
 ```
 
-**错误响应:** `404 Not Found`（版本不存在时）
+**Error Response:** `404 Not Found` (when version does not exist)
 
 ---
 
-### 6. 按数据库 ID 查询
+### 6. Get by Database ID
 
 ```
 GET /api/definitions/id/{id}
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `id` | Long | 数据库主键 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `id` | Long | Database primary key |
 
-**示例:** `GET /api/definitions/id/2`
+**Example:** `GET /api/definitions/id/2`
 
-**成功响应:** `200 OK`（包含完整 definitionJson，格式同接口 5）
+**Success Response:** `200 OK` (includes full definitionJson, same format as endpoint 5)
 
-**错误响应:** `404 Not Found`
+**Error Response:** `404 Not Found`
 
 ---
 
-### 7. 更新草稿定义
+### 7. Update Draft Definition
 
-只允许更新状态为 `DRAFT` 的定义，所有字段均为可选。
+Only `DRAFT` definitions can be updated. All fields are optional.
 
 ```
 PUT /api/definitions/{id}
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `id` | Long | 数据库主键 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `id` | Long | Database primary key |
 
 **Request Body:**
 
 ```json
 {
   "name": "Updated Name",
-  "definitionJson": "{ ... 更新后的 JSON ... }",
+  "definitionJson": "{ ... updated JSON ... }",
   "description": "Updated description"
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `name` | String | 否 | 更新名称 |
-| `definitionJson` | String / Object | 否 | 更新 JSON 定义 |
-| `description` | String | 否 | 更新描述 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | String | No | Updated name |
+| `definitionJson` | String / Object | No | Updated JSON definition |
+| `description` | String | No | Updated description |
 
-**成功响应:** `200 OK`
+**Success Response:** `200 OK`
 
 ```json
 {
@@ -281,29 +281,29 @@ PUT /api/definitions/{id}
 }
 ```
 
-**错误响应:**
+**Error Responses:**
 
-| 状态码 | 场景 |
-|--------|------|
+| Status Code | Scenario |
+|-------------|----------|
 | `400` | `Invalid definitionJson: ...` |
-| `404` | 定义不存在 |
+| `404` | Definition not found |
 | `500` | `Only DRAFT definitions can be updated. Current status: PUBLISHED` |
 
 ---
 
-### 8. 发布定义
+### 8. Publish Definition
 
-将 `DRAFT` 状态变更为 `PUBLISHED`，发布后可被工作流引擎使用。
+Changes status from `DRAFT` to `PUBLISHED`. Once published, the definition can be used by the workflow engine.
 
 ```
 POST /api/definitions/{id}/publish
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `id` | Long | 数据库主键 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `id` | Long | Database primary key |
 
-**成功响应:** `200 OK`
+**Success Response:** `200 OK`
 
 ```json
 {
@@ -318,23 +318,23 @@ POST /api/definitions/{id}/publish
 }
 ```
 
-**错误响应:** `500` — `Only DRAFT definitions can be published. Current status: ...`
+**Error Response:** `500` — `Only DRAFT definitions can be published. Current status: ...`
 
 ---
 
-### 9. 归档定义
+### 9. Archive Definition
 
-将定义归档（软删除），归档后不再被引擎用于新的工作流启动。
+Archive a definition (soft delete). Archived definitions will not be used for new workflow starts.
 
 ```
 POST /api/definitions/{id}/archive
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `id` | Long | 数据库主键 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `id` | Long | Database primary key |
 
-**成功响应:** `200 OK`
+**Success Response:** `200 OK`
 
 ```json
 {
@@ -351,19 +351,19 @@ POST /api/definitions/{id}/archive
 
 ---
 
-### 10. 删除草稿定义
+### 10. Delete Draft Definition
 
-永久删除状态为 `DRAFT` 的定义，非 DRAFT 状态无法删除（请使用归档）。
+Permanently delete a `DRAFT` definition. Non-DRAFT definitions cannot be deleted (use archive instead).
 
 ```
 DELETE /api/definitions/{id}
 ```
 
-| 路径参数 | 类型 | 说明 |
-|----------|------|------|
-| `id` | Long | 数据库主键 |
+| Path Parameter | Type | Description |
+|----------------|------|-------------|
+| `id` | Long | Database primary key |
 
-**成功响应:** `200 OK`
+**Success Response:** `200 OK`
 
 ```json
 {
@@ -372,33 +372,33 @@ DELETE /api/definitions/{id}
 }
 ```
 
-**错误响应:**
+**Error Responses:**
 
-| 状态码 | 场景 |
-|--------|------|
-| `404` | 定义不存在 |
+| Status Code | Scenario |
+|-------------|----------|
+| `404` | Definition not found |
 | `500` | `Only DRAFT definitions can be deleted. Current status: PUBLISHED. Use archive instead.` |
 
 ---
 
-## 接口总览
+## API Summary
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/definitions` | 创建新版本（DRAFT） |
-| `GET` | `/api/definitions` | 列出所有类型（每种最新版本） |
-| `GET` | `/api/definitions/types` | 列出所有类型名称 |
-| `GET` | `/api/definitions/{type}` | 列出指定类型所有版本 |
-| `GET` | `/api/definitions/{type}/{version}` | 查询指定版本（含 definitionJson） |
-| `GET` | `/api/definitions/id/{id}` | 按 ID 查询（含 definitionJson） |
-| `PUT` | `/api/definitions/{id}` | 更新草稿 |
-| `POST` | `/api/definitions/{id}/publish` | 发布草稿 |
-| `POST` | `/api/definitions/{id}/archive` | 归档 |
-| `DELETE` | `/api/definitions/{id}` | 删除草稿 |
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/definitions` | Create new version (DRAFT) |
+| `GET` | `/api/definitions` | List all types (latest version each) |
+| `GET` | `/api/definitions/types` | List all type names |
+| `GET` | `/api/definitions/{type}` | List all versions of a type |
+| `GET` | `/api/definitions/{type}/{version}` | Get specific version (includes definitionJson) |
+| `GET` | `/api/definitions/id/{id}` | Get by ID (includes definitionJson) |
+| `PUT` | `/api/definitions/{id}` | Update draft |
+| `POST` | `/api/definitions/{id}/publish` | Publish draft |
+| `POST` | `/api/definitions/{id}/archive` | Archive |
+| `DELETE` | `/api/definitions/{id}` | Delete draft |
 
-## 备注
+## Notes
 
-- 启动工作流时（`POST /api/engine/start`），引擎优先从 DB 查找最新 `PUBLISHED` 版本，若无则回退到 classpath 下的 `workflows/{type}.json` 文件
-- `definitionJson` 支持传入 JSON 字符串或嵌套 JSON 对象，后者会自动序列化
-- 列表接口（接口 2、3、4）响应中不包含 `definitionJson`，详情接口（5、6）才包含
-- 版本号在同一 type 下自动递增，无需手动指定
+- When starting a workflow (`POST /api/engine/start`), the engine first looks for the latest `PUBLISHED` version in DB; if not found, falls back to classpath file `workflows/{type}.json`
+- `definitionJson` accepts either a JSON string or a nested JSON object (the latter is auto-serialized)
+- List endpoints (2, 3, 4) do not include `definitionJson` in the response; detail endpoints (5, 6) do
+- Version numbers are auto-incremented per type; no manual specification needed

@@ -27,16 +27,20 @@ public class BranchNodeExecutor implements NodeExecutor {
         List<BranchCase> branches = node.getBranches();
         if (branches != null) {
             for (BranchCase branch : branches) {
+                boolean result;
                 try {
-                    boolean result = SpelEvaluator.evaluateBoolean(branch.getCondition(), context);
-                    logger.info("BRANCH [{}]: condition '{}' = {}", node.getId(), branch.getCondition(), result);
-                    if (result) {
-                        logger.info("BRANCH [{}]: taking branch -> {}", node.getId(), branch.getNext());
-                        return branch.getNext();
-                    }
+                    result = SpelEvaluator.evaluateBoolean(branch.getCondition(), context);
                 } catch (Exception e) {
-                    logger.warn("BRANCH [{}]: error evaluating '{}': {}",
-                            node.getId(), branch.getCondition(), e.getMessage());
+                    String msg = "BRANCH [" + node.getId() + "]: error evaluating condition '"
+                            + branch.getCondition() + "': " + e.getMessage()
+                            + ". Hint: string literals in SpEL must use single quotes, e.g. #severity == 'SEVERE'";
+                    logger.error(msg);
+                    throw new RuntimeException(msg, e);
+                }
+                logger.info("BRANCH [{}]: condition '{}' = {}", node.getId(), branch.getCondition(), result);
+                if (result) {
+                    logger.info("BRANCH [{}]: taking branch -> {}", node.getId(), branch.getNext());
+                    return branch.getNext();
                 }
             }
         }

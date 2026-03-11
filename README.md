@@ -1,10 +1,10 @@
 # Temporal Health Check Demo
 
-基于 **Temporal + Spring Boot** 的患者健康检查工作流演示项目，用于展示 Temporal 工作流引擎的核心能力。
+A patient health check workflow demo project built on **Temporal + Spring Boot**, showcasing the core capabilities of the Temporal workflow engine.
 
-## 技术栈
+## Tech Stack
 
-| 组件 | 版本 |
+| Component | Version |
 |---|---|
 | Java | 17 |
 | Spring Boot | 4.0.3 |
@@ -12,123 +12,101 @@
 | Temporal Server | 1.29.2 |
 | PostgreSQL | 12 |
 
-## 业务场景
+## Business Scenario
 
-模拟一个完整的医疗健康检查流程：
+Simulates a complete medical health check workflow:
 
 ```
-患者就诊 → 记录就诊 → 获取诊断 → 分析严重程度 → 随访循环 → 生成报告
+Patient Visit → Record Visit → Get Diagnosis → Analyze Severity → Follow-up Loop → Generate Report
                                                     ↑
-                                        外部事件（Signal）可动态改变流程
+                                        External events (Signal) can dynamically alter the flow
 ```
 
-### 工作流步骤
+### Workflow Steps
 
-1. **记录就诊** — 记录患者基本信息（ID、姓名、医生、就诊原因）
-2. **获取诊断结果** — 根据场景生成诊断评分（0.0 ~ 1.0）
-3. **分析严重程度** — 按评分划分等级：
-   - `NORMAL`（< 0.4）— 正常
-   - `ABNORMAL`（0.4 ~ 0.75）— 异常
-   - `SEVERE`（≥ 0.75）— 严重
-4. **随访循环** — 根据严重程度动态决定随访次数和间隔：
+1. **Record Visit** — Record patient basic info (ID, name, doctor, visit reason)
+2. **Get Diagnosis Result** — Generate a diagnosis score based on scenario (0.0 ~ 1.0)
+3. **Analyze Severity** — Classify severity by score:
+   - `NORMAL` (< 0.4) — Normal
+   - `ABNORMAL` (0.4 ~ 0.75) — Abnormal
+   - `SEVERE` (≥ 0.75) — Severe
+4. **Follow-up Loop** — Dynamically determine follow-up count and interval based on severity:
 
-   | 严重程度 | 最大随访次数 | 随访间隔（Demo 模式） | 随访间隔（真实模式） |
+   | Severity | Max Follow-ups | Follow-up Interval (Demo) | Follow-up Interval (Real) |
    |---|---|---|---|
-   | NORMAL | 3 | 30 秒 | 7 天 |
-   | ABNORMAL | 5 | 20 秒 | 7 天 |
-   | SEVERE | 7 | 15 秒 | 3 天 |
+   | NORMAL | 3 | 30 sec | 7 days |
+   | ABNORMAL | 5 | 20 sec | 7 days |
+   | SEVERE | 7 | 15 sec | 3 days |
 
-5. **生成总结报告** — 汇总诊断结果、随访记录、最终严重程度
+5. **Generate Summary Report** — Summarize diagnosis results, follow-up records, and final severity
 
-### 动态行为
+### Dynamic Behavior
 
-- 随访过程中健康评分会**动态变化**，可能触发严重程度升级/降级
-- 严重程度变化时自动调整随访计划（次数和间隔）
-- `SEVERE` 患者会立即通知医生
-- 恢复至 `NORMAL` 后提前结束随访
+- Health score **changes dynamically** during follow-ups, potentially triggering severity upgrades/downgrades
+- When severity changes, follow-up plan is automatically adjusted (count and interval)
+- `SEVERE` patients trigger immediate doctor notifications
+- Recovery to `NORMAL` ends follow-ups early
 
-## 演示的 Temporal 特性
+## Demonstrated Temporal Features
 
-| 特性 | 体现 |
+| Feature | How It's Used |
 |---|---|
-| **Workflow** | `HealthCheckWorkflow` 定义主流程，编排多个 Activity |
-| **Activity** | `HealthCheckActivities` 封装 5 个可重试的业务操作 |
-| **Signal（信号）** | `cancelFollowUp` — 外部取消随访；`newLabResult` — 注入新化验结果 |
-| **Query（查询）** | `getStatus` — 实时查询工作流状态（阶段、严重程度、随访进度） |
-| **持久化等待** | `Workflow.await()` 实现 Signal 感知的持久化睡眠 |
-| **自动重试** | Activity 失败自动重试（最多 3 次，初始间隔 1 秒） |
-| **确定性重放** | Worker 崩溃重启后通过 Event Sourcing 恢复状态 |
+| **Workflow** | `HealthCheckWorkflow` defines the main flow, orchestrating multiple Activities |
+| **Activity** | `HealthCheckActivities` wraps 5 retryable business operations |
+| **Signal** | `cancelFollowUp` — external follow-up cancellation; `newLabResult` — inject new lab results |
+| **Query** | `getStatus` — real-time workflow status (phase, severity, follow-up progress) |
+| **Durable Wait** | `Workflow.await()` for Signal-aware durable sleep |
+| **Auto Retry** | Activity auto-retries on failure (max 3 attempts, initial interval 1 sec) |
+| **Deterministic Replay** | Worker crash recovery via Event Sourcing |
 
-## 项目结构
+## Project Structure
 
 ```
-src/main/java/com/example/temporaldemo/
-├── TemporalDemoApplication.java          # Spring Boot 启动类
-└── healthcheck/
-    ├── HealthCheckConstants.java          # 共享常量（Task Queue 名称）
-    ├── config/
-    │   └── TemporalConfig.java           # Temporal Bean 配置（WorkflowClient + Worker）
-    ├── controller/
-    │   └── HealthCheckController.java    # REST API（启动工作流、发送 Signal、查询状态）
-    ├── model/
-    │   ├── CancelRequest.java            # 取消请求体
-    │   ├── DiagnosisResult.java          # 诊断结果
-    │   ├── FollowUpRecord.java           # 随访记录
-    │   ├── HealthCheckStatus.java        # 工作流状态（Query 返回值）
-    │   ├── LabResultRequest.java         # 化验结果请求体
-    │   ├── PatientVisit.java             # 患者就诊信息
-    │   ├── Severity.java                 # 严重程度枚举（含 fromScore 静态方法）
-    │   └── StartHealthCheckRequest.java  # 启动工作流请求体
-    ├── activity/
-    │   ├── HealthCheckActivities.java    # Activity 接口
-    │   └── HealthCheckActivitiesImpl.java# Activity 实现
-    ├── workflow/
-    │   ├── HealthCheckWorkflow.java      # Workflow 接口（含 Signal + Query 定义）
-    │   └── HealthCheckWorkflowImpl.java  # Workflow 实现
-    ├── starter/
-    │   ├── HealthCheckStarter.java       # CLI 方式启动工作流（旧）
-    │   └── SignalSender.java             # CLI 方式发送 Signal（旧）
-    └── worker/
-        └── HealthCheckWorker.java        # 独立 Worker 进程（旧）
+engine-model/     — Shared model classes (InputParam, etc.)
+engine-core/      — Workflow engine core (orchestrator workflow, generic activity)
+engine-api/       — REST API + definition management (Spring Boot application)
+health-check-worker/ — Health check Activity worker (Spring Boot application)
 ```
 
-## 快速开始
+## Quick Start
 
-### 前置条件
+### Prerequisites
 
 - Java 17+
 - Docker & Docker Compose
 
-### 1. 启动 Temporal Server
+### 1. Start Temporal Server
 
 ```bash
 docker compose up -d
 ```
 
-等待约 30 秒，验证服务：
+Wait ~30 seconds, verify services:
 
 ```bash
 docker compose ps
-# 确认 temporal-db、temporal-server、temporal-ui 三个容器都是 running
+# Confirm temporal-db, temporal-server, temporal-ui are all running
 ```
 
-### 2. 启动应用
+### 2. Build and Run
 
 ```bash
-./gradlew bootRun
+./gradlew build
+docker compose up -d engine-api engine-core health-check-worker
 ```
 
-应用启动后同时包含：
-- **Worker** — 监听 `health-check-task-queue`，执行 Workflow 和 Activity
-- **HTTP API** — 端口 `8081`，提供 REST 接口
+Services:
+- **engine-api** — REST API on port `8081`
+- **engine-core** — Workflow orchestrator worker
+- **health-check-worker** — Activity worker for health check tasks
 
-### 3. 打开 Temporal UI
+### 3. Open Temporal UI
 
-浏览器访问 http://localhost:8080 ，可查看工作流列表和 Event History。
+Visit http://localhost:8080 in your browser to view workflow list and Event History.
 
 ## HTTP API
 
-### 启动工作流
+### Start a Workflow
 
 ```bash
 curl -X POST http://localhost:8081/api/healthcheck/start \
@@ -142,15 +120,15 @@ curl -X POST http://localhost:8081/api/healthcheck/start \
   }'
 ```
 
-`scenario` 可选值：`normal`、`abnormal`、`severe`，不传则随机。
+`scenario` options: `normal`, `abnormal`, `severe` (random if omitted).
 
-### 查询状态
+### Query Status
 
 ```bash
 curl http://localhost:8081/api/healthcheck/health-check-P001/status
 ```
 
-返回示例：
+Response example:
 
 ```json
 {
@@ -163,7 +141,7 @@ curl http://localhost:8081/api/healthcheck/health-check-P001/status
 }
 ```
 
-### 发送化验结果（Signal）
+### Send Lab Result (Signal)
 
 ```bash
 curl -X POST http://localhost:8081/api/healthcheck/health-check-P001/labresult \
@@ -171,9 +149,9 @@ curl -X POST http://localhost:8081/api/healthcheck/health-check-P001/labresult \
   -d '{"score": 0.9}'
 ```
 
-`score` 范围 0.0 ~ 1.0，会动态改变严重程度和随访计划。
+`score` range 0.0 ~ 1.0, dynamically changes severity and follow-up plan.
 
-### 取消随访（Signal）
+### Cancel Follow-up (Signal)
 
 ```bash
 curl -X POST http://localhost:8081/api/healthcheck/health-check-P001/cancel \
@@ -181,9 +159,9 @@ curl -X POST http://localhost:8081/api/healthcheck/health-check-P001/cancel \
   -d '{"reason": "Patient transferred to another hospital"}'
 ```
 
-## 演示脚本
+## Demo Scripts
 
-### 第一幕：正常场景 — 快速完成
+### Act 1: Normal Scenario — Quick Completion
 
 ```bash
 curl -X POST http://localhost:8081/api/healthcheck/start \
@@ -191,9 +169,9 @@ curl -X POST http://localhost:8081/api/healthcheck/start \
   -d '{"patientId":"P001","scenario":"normal"}'
 ```
 
-观察：严重程度为 `NORMAL`，少量随访后自动完成。
+Observe: Severity is `NORMAL`, a few follow-ups then auto-completes.
 
-### 第二幕：严重场景 — 长时间随访
+### Act 2: Severe Scenario — Extended Follow-ups
 
 ```bash
 curl -X POST http://localhost:8081/api/healthcheck/start \
@@ -201,112 +179,112 @@ curl -X POST http://localhost:8081/api/healthcheck/start \
   -d '{"patientId":"P002","scenario":"severe"}'
 ```
 
-观察：多次随访，通过 `/status` 接口轮询查看进度变化。
+Observe: Multiple follow-ups; poll `/status` to watch progress changes.
 
-### 第三幕：Signal 改变病情
+### Act 3: Signal Changes Condition
 
 ```bash
-# 启动 abnormal 场景
+# Start abnormal scenario
 curl -X POST http://localhost:8081/api/healthcheck/start \
   -H "Content-Type: application/json" \
   -d '{"patientId":"P003","scenario":"abnormal"}'
 
-# 等几秒后注入恶化的化验结果
+# Wait a few seconds, inject worsening lab result
 curl -X POST http://localhost:8081/api/healthcheck/health-check-P003/labresult \
   -H "Content-Type: application/json" \
   -d '{"score": 0.9}'
 
-# 再注入好转的结果
+# Then inject improving result
 curl -X POST http://localhost:8081/api/healthcheck/health-check-P003/labresult \
   -H "Content-Type: application/json" \
   -d '{"score": 0.1}'
 ```
 
-观察：严重程度从 `ABNORMAL` → `SEVERE` → `NORMAL`，随访计划动态调整。
+Observe: Severity changes `ABNORMAL` → `SEVERE` → `NORMAL`, follow-up plan adjusts dynamically.
 
-### 第四幕：外部取消
+### Act 4: External Cancellation
 
 ```bash
-# 启动 severe 场景
+# Start severe scenario
 curl -X POST http://localhost:8081/api/healthcheck/start \
   -H "Content-Type: application/json" \
   -d '{"patientId":"P004","scenario":"severe"}'
 
-# 发送取消信号
+# Send cancel signal
 curl -X POST http://localhost:8081/api/healthcheck/health-check-P004/cancel \
   -H "Content-Type: application/json" \
   -d '{"reason": "Patient transferred to another hospital"}'
 ```
 
-观察：工作流优雅终止，生成包含取消原因的报告。
+Observe: Workflow terminates gracefully, generating a report with the cancellation reason.
 
-### 第五幕：崩溃恢复
+### Act 5: Crash Recovery
 
 ```bash
-# 1. 启动一个 severe 场景
+# 1. Start a severe scenario
 curl -X POST http://localhost:8081/api/healthcheck/start \
   -H "Content-Type: application/json" \
   -d '{"patientId":"P005","scenario":"severe"}'
 
-# 2. 确认工作流在运行中
+# 2. Confirm workflow is running
 curl http://localhost:8081/api/healthcheck/health-check-P005/status
 
-# 3. 强杀 Worker 进程（模拟崩溃）
+# 3. Kill the Worker process (simulate crash)
 kill -9 $(jps | grep TemporalDemoApplication | awk '{print $1}')
 
-# 4. 在 Temporal UI (http://localhost:8080) 查看，工作流卡在 Running 状态
+# 4. Check Temporal UI (http://localhost:8080) — workflow stuck in Running state
 
-# 5. 重新启动应用
+# 5. Restart the application
 ./gradlew bootRun
 
-# 6. 工作流自动从中断点恢复继续执行
+# 6. Workflow automatically resumes from the interruption point
 curl http://localhost:8081/api/healthcheck/health-check-P005/status
 ```
 
-## 核心原理
+## Core Concepts
 
-### Event Sourcing（事件溯源）
+### Event Sourcing
 
-Temporal 不持久化 Workflow 的内存变量。它将每个关键事件（Activity 调用/返回、Timer、Signal）持久化到数据库。恢复状态时通过**重放 Workflow 代码 + 跳过已完成的步骤**实现：
+Temporal does not persist Workflow in-memory variables. It persists each key event (Activity call/return, Timer, Signal) to the database. State recovery is achieved by **replaying the Workflow code and skipping already completed steps**:
 
 ```
-重放：从 Workflow 代码第一行开始执行
-  recordVisit()      → 历史有结果 → 跳过，返回旧值
-  getDiagnosisResult → 历史有结果 → 跳过，返回旧值
-  followUpCompleted++ → 纯 Java 代码，正常执行
-  performFollowUp()  → 历史有结果 → 跳过，返回旧值
-  Workflow.await()   → 历史有 TimerFired → 跳过
-  performFollowUp()  → 历史无记录 → 真正执行
+Replay: Execute Workflow code from the first line
+  recordVisit()      → History has result → Skip, return cached value
+  getDiagnosisResult → History has result → Skip, return cached value
+  followUpCompleted++ → Pure Java code, execute normally
+  performFollowUp()  → History has result → Skip, return cached value
+  Workflow.await()   → History has TimerFired → Skip
+  performFollowUp()  → No history record → Actually execute
 ```
 
-### 确定性约束
+### Determinism Constraints
 
-由于每次事件触发都会重放 Workflow 代码，因此 Workflow 中**不能**包含非确定性操作：
+Since Workflow code is replayed on every event trigger, Workflows **must not** contain non-deterministic operations:
 
-| 禁止 | 替代方案 |
+| Forbidden | Alternative |
 |---|---|
-| `new Random()` | 放在 Activity 里 |
-| `System.currentTimeMillis()` | 使用 `Workflow.currentTimeMillis()` |
-| 直接 HTTP/数据库调用 | 放在 Activity 里 |
-| `Thread.sleep()` | 使用 `Workflow.sleep()` 或 `Workflow.await()` |
+| `new Random()` | Move to Activity |
+| `System.currentTimeMillis()` | Use `Workflow.currentTimeMillis()` |
+| Direct HTTP/database calls | Move to Activity |
+| `Thread.sleep()` | Use `Workflow.sleep()` or `Workflow.await()` |
 
-### Workflow.await() 机制
+### Workflow.await() Mechanism
 
-`Workflow.await(timeout, condition)` 不是真正的线程阻塞：
+`Workflow.await(timeout, condition)` is not a real thread block:
 
-1. SDK 向 Server 注册 Timer
-2. **释放 Worker 线程**（等待中的 Workflow 不消耗任何 Worker 资源）
-3. Timer 到期或 Signal 到达时，Worker 领取新的 WorkflowTask
-4. 重放 Workflow 代码到 `await()` 位置，评估条件决定是继续等还是往下走
+1. SDK registers a Timer with the Server
+2. **Releases the Worker thread** (waiting Workflows consume zero Worker resources)
+3. When Timer expires or Signal arrives, Worker picks up a new WorkflowTask
+4. Replays Workflow code to the `await()` position, evaluates condition to decide whether to continue waiting or proceed
 
-## 配置
+## Configuration
 
-| 配置项 | 默认值 | 说明 |
+| Setting | Default | Description |
 |---|---|---|
-| `server.port` | 8081 | HTTP 端口（避免与 Temporal UI 8080 冲突） |
-| `temporal.server.target` | 127.0.0.1:7233 | Temporal Server gRPC 地址 |
+| `server.port` | 8081 | HTTP port (avoids conflict with Temporal UI on 8080) |
+| `temporal.server.target` | 127.0.0.1:7233 | Temporal Server gRPC address |
 
-## 清理
+## Cleanup
 
 ```bash
 docker compose down -v

@@ -10,5 +10,6 @@ tasks.named('jar') {
 dependencies {
     implementation project(':engine-model')
     implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation "io.temporal:temporal-sdk:1.24.1"
 }

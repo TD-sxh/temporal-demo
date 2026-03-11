@@ -91,10 +91,10 @@ public class NodeDefinition {
     private String activityName;
     /** Input parameters (values may contain SpEL like "${context.patientId}") */
     private Map<String, Object> input;
-    /** Key to store the activity result in workflow context.
-     *  Can be a String (single key) or a Map&lt;String,String&gt; (field mapping).
-     *  Map form: {"contextVar": "resultField"}, special value "*" means the whole result. */
-    private Object outputKey;
+    /** Output mapping: {"#varName": "resultField"} or {"#varName": "*"}.
+     *  Keys with '#' prefix are stored in global context (stripped of '#').
+     *  Value "*" means the entire activity result; other values extract a specific field. */
+    private Map<String, String> outputKey;
 
     // --- BRANCH ---
     /** List of conditional branches (evaluated in order) */
@@ -127,9 +127,8 @@ public class NodeDefinition {
     private int delaySeconds;
 
     // --- START ---
-    /** Input parameter schema for START nodes.
-     *  Key = parameter name, Value = InputParam definition with type/required/default/description. */
-    private Map<String, InputParam> inputSchema;
+    /** Input parameter schema for START nodes (array of InputParam with name/type/required/default/description). */
+    private List<InputParam> inputSchema;
 
     // --- Common ---
     /** Next node ID (null = end of flow) */
@@ -152,8 +151,8 @@ public class NodeDefinition {
     public Map<String, Object> getInput() { return input; }
     public void setInput(Map<String, Object> input) { this.input = input; }
 
-    public Object getOutputKey() { return outputKey; }
-    public void setOutputKey(Object outputKey) { this.outputKey = outputKey; }
+    public Map<String, String> getOutputKey() { return outputKey; }
+    public void setOutputKey(Map<String, String> outputKey) { this.outputKey = outputKey; }
 
     public List<BranchCase> getBranches() { return branches; }
     public void setBranches(List<BranchCase> branches) { this.branches = branches; }
@@ -185,8 +184,8 @@ public class NodeDefinition {
     public int getDelaySeconds() { return delaySeconds; }
     public void setDelaySeconds(int delaySeconds) { this.delaySeconds = delaySeconds; }
 
-    public Map<String, InputParam> getInputSchema() { return inputSchema; }
-    public void setInputSchema(Map<String, InputParam> inputSchema) { this.inputSchema = inputSchema; }
+    public List<InputParam> getInputSchema() { return inputSchema; }
+    public void setInputSchema(List<InputParam> inputSchema) { this.inputSchema = inputSchema; }
 
     public String getNext() { return next; }
     public void setNext(String next) { this.next = next; }

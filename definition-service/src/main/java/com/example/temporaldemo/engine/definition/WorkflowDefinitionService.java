@@ -18,8 +18,8 @@ import java.util.Optional;
  *
  * <p>Lookup strategy:
  * <ol>
- *   <li>DB 查询（优先取 PUBLISHED 的最新版本）</li>
- *   <li>如 DB 查不到，回退到 classpath 下 {@code workflows/<type>.json}</li>
+ *   <li>Query DB (prefer the latest PUBLISHED version)</li>
+ *   <li>Fall back to classpath resource {@code workflows/<type>.json} if not found in DB</li>
  * </ol>
  */
 @Service
@@ -89,16 +89,10 @@ public class WorkflowDefinitionService {
 
     // ─── CRUD ────────────────────────────────────────────────────
 
-    /**
-     * Create a new version (DRAFT) for a given type.
-     * Version number is auto-incremented.
-     */
     @Transactional
-    public WorkflowDefinitionEntity create(String name,
+    public WorkflowDefinitionEntity create(String type, String name,
                                            String definitionJson, String description) {
-        // Validate JSON and extract type from JSON "id" field
         validateJson(definitionJson);
-        String type = extractTypeFromJson(definitionJson);
 
         int nextVersion = repository.findMaxVersionByType(type) + 1;
 
@@ -115,9 +109,6 @@ public class WorkflowDefinitionService {
         return entity;
     }
 
-    /**
-     * Update the definition JSON of an existing DRAFT definition.
-     */
     @Transactional
     public WorkflowDefinitionEntity update(Long id, String definitionJson, String name, String description) {
         WorkflowDefinitionEntity entity = repository.findById(id)
@@ -130,11 +121,6 @@ public class WorkflowDefinitionService {
 
         if (definitionJson != null) {
             validateJson(definitionJson);
-            String jsonType = extractTypeFromJson(definitionJson);
-            if (!entity.getType().equals(jsonType)) {
-                throw new IllegalArgumentException(
-                        "JSON 'id' field ('" + jsonType + "') does not match the definition type ('" + entity.getType() + "'). Cannot change type via update.");
-            }
             entity.setDefinitionJson(definitionJson);
         }
         if (name != null) {
@@ -149,9 +135,6 @@ public class WorkflowDefinitionService {
         return entity;
     }
 
-    /**
-     * Publish a DRAFT definition so it becomes available for startup.
-     */
     @Transactional
     public WorkflowDefinitionEntity publish(Long id) {
         WorkflowDefinitionEntity entity = repository.findById(id)
@@ -168,9 +151,6 @@ public class WorkflowDefinitionService {
         return entity;
     }
 
-    /**
-     * Archive a PUBLISHED definition (soft-delete, won't be used for new startups).
-     */
     @Transactional
     public WorkflowDefinitionEntity archive(Long id) {
         WorkflowDefinitionEntity entity = repository.findById(id)
@@ -182,9 +162,6 @@ public class WorkflowDefinitionService {
         return entity;
     }
 
-    /**
-     * Delete a DRAFT definition permanently.
-     */
     @Transactional
     public void delete(Long id) {
         WorkflowDefinitionEntity entity = repository.findById(id)
@@ -241,26 +218,6 @@ public class WorkflowDefinitionService {
             objectMapper.readTree(json);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid JSON: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Extract the "id" field from definitionJson as the workflow type.
-     * @throws IllegalArgumentException if "id" is missing or blank
-     */
-    public String extractTypeFromJson(String definitionJson) {
-        try {
-            var tree = objectMapper.readTree(definitionJson);
-            var idNode = tree.get("id");
-            if (idNode == null || idNode.isNull() || idNode.asText().isBlank()) {
-                throw new IllegalArgumentException(
-                        "definitionJson must contain a non-empty 'id' field as the workflow type identifier");
-            }
-            return idNode.asText();
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to parse definitionJson: " + e.getMessage(), e);
         }
     }
 

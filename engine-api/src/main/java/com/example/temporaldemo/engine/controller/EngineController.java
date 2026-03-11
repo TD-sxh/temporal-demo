@@ -1,7 +1,7 @@
 package com.example.temporaldemo.engine.controller;
 
-import com.example.temporaldemo.engine.definition.WorkflowDefinitionService;
-import com.example.temporaldemo.engine.definition.WorkflowDefinitionService.ResolvedDefinition;
+import com.example.temporaldemo.engine.client.DefinitionClient;
+import com.example.temporaldemo.engine.client.DefinitionClient.ResolvedDefinition;
 import com.example.temporaldemo.engine.model.InputParam;
 import com.example.temporaldemo.engine.model.NodeDefinition;
 import com.example.temporaldemo.engine.model.NodeType;
@@ -10,6 +10,7 @@ import com.example.temporaldemo.engine.workflow.OrchestratorWorkflow;
 import tools.jackson.databind.ObjectMapper;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
+import io.temporal.api.enums.v1.WorkflowIdReusePolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,14 +43,14 @@ public class EngineController {
     private String taskQueue;
 
     private final WorkflowClient workflowClient;
-    private final WorkflowDefinitionService definitionService;
+    private final DefinitionClient definitionClient;
     private final ObjectMapper objectMapper;
 
     public EngineController(WorkflowClient workflowClient,
-                            WorkflowDefinitionService definitionService,
+                            DefinitionClient definitionClient,
                             ObjectMapper objectMapper) {
         this.workflowClient = workflowClient;
-        this.definitionService = definitionService;
+        this.definitionClient = definitionClient;
         this.objectMapper = objectMapper;
     }
 
@@ -85,10 +86,10 @@ public class EngineController {
             return ResponseEntity.badRequest().body(Map.of("error", "type is required"));
         }
 
-        // Resolve definition (DB → classpath fallback)
+        // Resolve definition from definition-service
         ResolvedDefinition resolved = (version != null)
-                ? definitionService.resolve(type, version)
-                : definitionService.resolve(type);
+                ? definitionClient.resolve(type, version)
+                : definitionClient.resolve(type);
 
         // Validate required inputs against START node's inputSchema
         List<String> validationErrors = validateInputs(resolved.definitionJson(), inputVars);
@@ -123,6 +124,7 @@ public class EngineController {
                         .setTaskQueue(taskQueue)
                         .setWorkflowId(workflowId)
                         .setWorkflowExecutionTimeout(Duration.ofHours(24))
+                        .setWorkflowIdReusePolicy(WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
                         .build());
 
         WorkflowClient.start(workflow::execute, resolved.definitionJson(), enrichedVars);
@@ -172,8 +174,8 @@ public class EngineController {
 
         // Resolve definition once for all items
         ResolvedDefinition resolved = (version != null)
-                ? definitionService.resolve(type, version)
-                : definitionService.resolve(type);
+                ? definitionClient.resolve(type, version)
+                : definitionClient.resolve(type);
 
         List<Map<String, Object>> results = new ArrayList<>();
         int succeeded = 0;
@@ -216,6 +218,7 @@ public class EngineController {
                                 .setTaskQueue(taskQueue)
                                 .setWorkflowId(workflowId)
                                 .setWorkflowExecutionTimeout(Duration.ofHours(24))
+                                .setWorkflowIdReusePolicy(WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
                                 .build());
 
                 WorkflowClient.start(workflow::execute, resolved.definitionJson(), enrichedVars);
@@ -252,14 +255,14 @@ public class EngineController {
     @GetMapping("/schema/{type}")
     public ResponseEntity<Map<String, Object>> getSchema(@PathVariable String type) {
         try {
-            ResolvedDefinition resolved = definitionService.resolve(type);
-            Map<String, InputParam> schema = extractInputSchema(resolved.definitionJson());
+            ResolvedDefinition resolved = definitionClient.resolve(type);
+            List<InputParam> schema = extractInputSchema(resolved.definitionJson());
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("type", type);
             response.put("version", resolved.version());
             response.put("source", resolved.source());
-            response.put("inputSchema", schema != null ? schema : Map.of());
+            response.put("inputSchema", schema != null ? schema : List.of());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -334,7 +337,7 @@ public class EngineController {
     /**
      * Extract the inputSchema from the START node, or null if not defined.
      */
-    private Map<String, InputParam> extractInputSchema(String definitionJson) {
+    private List<InputParam> extractInputSchema(String definitionJson) {
         try {
             WorkflowDefinition def = objectMapper.readValue(definitionJson, WorkflowDefinition.class);
             if (def.getNodes() == null) return null;
@@ -354,16 +357,15 @@ public class EngineController {
      * Returns a list of missing required parameter names (empty = valid).
      */
     private List<String> validateInputs(String definitionJson, Map<String, Object> inputVars) {
-        Map<String, InputParam> schema = extractInputSchema(definitionJson);
+        List<InputParam> schema = extractInputSchema(definitionJson);
         if (schema == null || schema.isEmpty()) {
             return List.of(); // No schema → no validation
         }
 
         List<String> missing = new ArrayList<>();
-        for (Map.Entry<String, InputParam> entry : schema.entrySet()) {
-            String paramName = entry.getKey();
-            InputParam param = entry.getValue();
+        for (InputParam param : schema) {
             if (param.isRequired()) {
+                String paramName = param.getName();
                 if (inputVars == null || !inputVars.containsKey(paramName)
                         || inputVars.get(paramName) == null) {
                     missing.add(paramName);
@@ -377,7 +379,7 @@ public class EngineController {
      * Apply default values from the input schema for optional params not provided.
      */
     private Map<String, Object> applyDefaults(String definitionJson, Map<String, Object> inputVars) {
-        Map<String, InputParam> schema = extractInputSchema(definitionJson);
+        List<InputParam> schema = extractInputSchema(definitionJson);
         if (schema == null || schema.isEmpty()) {
             return inputVars;
         }
@@ -385,9 +387,8 @@ public class EngineController {
         Map<String, Object> result = new LinkedHashMap<>();
         if (inputVars != null) result.putAll(inputVars);
 
-        for (Map.Entry<String, InputParam> entry : schema.entrySet()) {
-            String paramName = entry.getKey();
-            InputParam param = entry.getValue();
+        for (InputParam param : schema) {
+            String paramName = param.getName();
             if (!result.containsKey(paramName) && param.getDefaultValue() != null) {
                 result.put(paramName, param.getDefaultValue());
             }

@@ -1,8 +1,11 @@
 package com.example.temporaldemo.engine.activity;
 
+import com.example.temporaldemo.engine.model.ActivityInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -18,13 +21,23 @@ public class ActivityHandlerRegistry {
     private static final Logger logger = LoggerFactory.getLogger(ActivityHandlerRegistry.class);
 
     private final Map<String, ActivityHandler> handlers = new ConcurrentHashMap<>();
+    private final Map<String, ActivityInfo> infos = new ConcurrentHashMap<>();
 
     /**
-     * Register an activity handler with the given name.
+     * Register an activity handler with optional metadata.
      */
-    public void register(String name, ActivityHandler handler) {
+    public void register(String name, ActivityHandler handler, ActivityInfo info) {
         handlers.put(name, handler);
+        if (info != null) {
+            info.setName(name);
+            infos.put(name, info);
+        }
         logger.info("Registered activity handler: {}", name);
+    }
+
+    /** Register without metadata (backward compat). */
+    public void register(String name, ActivityHandler handler) {
+        register(name, handler, null);
     }
 
     /**
@@ -51,5 +64,9 @@ public class ActivityHandlerRegistry {
 
     public Map<String, ActivityHandler> getAllHandlers() {
         return Map.copyOf(handlers);
+    }
+
+    public List<ActivityInfo> getAllActivityInfos() {
+        return new ArrayList<>(infos.values());
     }
 }

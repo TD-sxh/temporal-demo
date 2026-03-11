@@ -1,9 +1,12 @@
 package com.example.temporaldemo.engine.expression;
 
 import com.example.temporaldemo.engine.context.WorkflowContext;
+import org.springframework.expression.AccessException;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
+import org.springframework.expression.PropertyAccessor;
+import org.springframework.expression.TypedValue;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 
@@ -85,6 +88,27 @@ public class SpelEvaluator {
         for (Map.Entry<String, Object> entry : context.getAllVariables().entrySet()) {
             evalCtx.setVariable(entry.getKey(), entry.getValue());
         }
+        // Fallback: bare identifiers that can't be resolved as properties are
+        // treated as string literals. This allows writing conditions like
+        // "#severity == SEVERE" instead of "#severity == 'SEVERE'".
+        evalCtx.addPropertyAccessor(new PropertyAccessor() {
+            @Override
+            public Class<?>[] getSpecificTargetClasses() { return null; }
+
+            @Override
+            public boolean canRead(EvaluationContext ctx, Object target, String name) { return true; }
+
+            @Override
+            public TypedValue read(EvaluationContext ctx, Object target, String name) throws AccessException {
+                return new TypedValue(name);
+            }
+
+            @Override
+            public boolean canWrite(EvaluationContext ctx, Object target, String name) { return false; }
+
+            @Override
+            public void write(EvaluationContext ctx, Object target, String name, Object newValue) {}
+        });
         return evalCtx;
     }
 }

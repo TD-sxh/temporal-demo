@@ -42,7 +42,7 @@
           "defaultValue": "normal"
         }
       ],
-        "next": "record_visit"
+      "next": "record_visit"
     },
     {
       "id": "record_visit",

@@ -1,5 +1,6 @@
 package com.example.temporaldemo.engine.definition;
 
+import com.example.temporaldemo.engine.definition.WorkflowDefinitionService.ResolvedDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -11,20 +12,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * CRUD REST controller for managing workflow definitions.
+ * REST controller for managing workflow definitions.
  *
- * <p>Endpoints:
- * <ul>
- *   <li>POST   /api/definitions                — Create a new definition version (DRAFT)</li>
- *   <li>GET    /api/definitions                — List all types (latest version per type)</li>
- *   <li>GET    /api/definitions/types           — List all distinct type names</li>
- *   <li>GET    /api/definitions/{type}          — List all versions of a type</li>
- *   <li>GET    /api/definitions/{type}/{version}— Get specific version</li>
- *   <li>PUT    /api/definitions/{id}            — Update a DRAFT definition</li>
- *   <li>POST   /api/definitions/{id}/publish    — Publish a DRAFT → PUBLISHED</li>
- *   <li>POST   /api/definitions/{id}/archive    — Archive (soft-delete)</li>
- *   <li>DELETE  /api/definitions/{id}            — Hard-delete a DRAFT</li>
- * </ul>
+ * <p>CRUD endpoints + resolve endpoints for engine-api consumption.
  */
 @RestController
 @RequestMapping("/api/definitions")
@@ -38,33 +28,36 @@ public class DefinitionController {
         this.service = service;
     }
 
-    // ─── Create ──────────────────────────────────────────────────
+    // ─── Resolve (used by engine-api) ────────────────────────────
 
     /**
-     * Create a new version of a workflow definition.
-     *
-     * <p>The workflow type ({@code type}) is automatically extracted from the
-     * {@code id} field inside {@code definitionJson}. There is no need to
-     * supply a separate {@code type} parameter.
-     *
-     * <p>Request body:
-     * <pre>
-     * {
-     *   "name": "Health Check Workflow",
-     *   "definitionJson": { "id": "health-check-flow", ... },
-     *   "description": "Initial version"
-     * }
-     * </pre>
-     *
-     * <p>The {@code definitionJson} field can be a raw JSON string or
-     * an embedded JSON object (will be serialized).
+     * Resolve the latest PUBLISHED definition for a type.
+     * Falls back to classpath if not found in DB.
      */
+    @GetMapping("/resolve/{type}")
+    public ResponseEntity<Map<String, Object>> resolve(@PathVariable String type) {
+        ResolvedDefinition resolved = service.resolve(type);
+        return ResponseEntity.ok(toResolvedMap(resolved));
+    }
+
+    /**
+     * Resolve a specific version of a type.
+     */
+    @GetMapping("/resolve/{type}/{version}")
+    public ResponseEntity<Map<String, Object>> resolveVersion(
+            @PathVariable String type, @PathVariable int version) {
+        ResolvedDefinition resolved = service.resolve(type, version);
+        return ResponseEntity.ok(toResolvedMap(resolved));
+    }
+
+    // ─── Create ──────────────────────────────────────────────────
+
     @PostMapping
     public ResponseEntity<Map<String, Object>> create(@RequestBody Map<String, Object> request) {
+        String type = (String) request.get("type");
         String name = (String) request.get("name");
         String description = (String) request.get("description");
 
-        // definitionJson can be a String or an embedded object
         Object defObj = request.get("definitionJson");
         String definitionJson;
         if (defObj instanceof String str) {
@@ -78,43 +71,34 @@ public class DefinitionController {
             }
         }
 
+        if (type == null || type.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "type is required"));
+        }
         if (definitionJson == null || definitionJson.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "definitionJson is required"));
         }
 
-        WorkflowDefinitionEntity entity = service.create(name, definitionJson, description);
+        WorkflowDefinitionEntity entity = service.create(type, name, definitionJson, description);
         return ResponseEntity.status(HttpStatus.CREATED).body(toMap(entity));
     }
 
     // ─── Read ────────────────────────────────────────────────────
 
-    /**
-     * List all workflow types with their latest version info.
-     */
     @GetMapping
     public List<Map<String, Object>> listAll() {
         return service.listAllLatest().stream().map(this::toMap).toList();
     }
 
-    /**
-     * List all distinct type names.
-     */
     @GetMapping("/types")
     public List<String> listTypes() {
         return service.listAllTypes();
     }
 
-    /**
-     * List all versions of a given type.
-     */
     @GetMapping("/{type}")
     public List<Map<String, Object>> listVersions(@PathVariable String type) {
         return service.listByType(type).stream().map(this::toMap).toList();
     }
 
-    /**
-     * Get a specific version of a type.
-     */
     @GetMapping("/{type}/{version}")
     public ResponseEntity<Map<String, Object>> getVersion(
             @PathVariable String type, @PathVariable Integer version) {
@@ -124,9 +108,6 @@ public class DefinitionController {
          .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * Get definition by database ID.
-     */
     @GetMapping("/id/{id}")
     public ResponseEntity<Map<String, Object>> getById(@PathVariable Long id) {
         return service.findById(id)
@@ -136,18 +117,6 @@ public class DefinitionController {
 
     // ─── Update ──────────────────────────────────────────────────
 
-    /**
-     * Update a DRAFT definition.
-     *
-     * <p>Request body (all fields optional):
-     * <pre>
-     * {
-     *   "name": "Updated Name",
-     *   "definitionJson": "{ ... }",
-     *   "description": "Updated desc"
-     * }
-     * </pre>
-     */
     @PutMapping("/{id}")
     public ResponseEntity<Map<String, Object>> update(
             @PathVariable Long id,
@@ -174,18 +143,12 @@ public class DefinitionController {
 
     // ─── Status transitions ──────────────────────────────────────
 
-    /**
-     * Publish a DRAFT definition.
-     */
     @PostMapping("/{id}/publish")
     public ResponseEntity<Map<String, Object>> publish(@PathVariable Long id) {
         WorkflowDefinitionEntity entity = service.publish(id);
         return ResponseEntity.ok(toMap(entity));
     }
 
-    /**
-     * Archive a definition.
-     */
     @PostMapping("/{id}/archive")
     public ResponseEntity<Map<String, Object>> archive(@PathVariable Long id) {
         WorkflowDefinitionEntity entity = service.archive(id);
@@ -194,9 +157,6 @@ public class DefinitionController {
 
     // ─── Delete ──────────────────────────────────────────────────
 
-    /**
-     * Delete a DRAFT definition permanently.
-     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> delete(@PathVariable Long id) {
         service.delete(id);
@@ -204,6 +164,15 @@ public class DefinitionController {
     }
 
     // ─── Helpers ─────────────────────────────────────────────────
+
+    private Map<String, Object> toResolvedMap(ResolvedDefinition resolved) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("definitionJson", resolved.definitionJson());
+        map.put("version", resolved.version());
+        map.put("source", resolved.source());
+        map.put("entityId", resolved.entityId());
+        return map;
+    }
 
     private Map<String, Object> toMap(WorkflowDefinitionEntity entity) {
         Map<String, Object> map = new LinkedHashMap<>();

@@ -6,14 +6,18 @@ package com.example.temporaldemo.engine.model;
  * <p>JSON example:
  * <pre>
  * {
+ *   "name": "patientId",
  *   "type": "string",
  *   "required": true,
  *   "defaultValue": null,
- *   "description": "患者ID"
+ *   "description": "Patient ID"
  * }
  * </pre>
  */
 public class InputParam {
+
+    /** Parameter name (unique within the schema) */
+    private String name;
 
     /** Data type hint: string, number, boolean, object */
     private String type = "string";
@@ -28,6 +32,9 @@ public class InputParam {
     private String description;
 
     public InputParam() {}
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }

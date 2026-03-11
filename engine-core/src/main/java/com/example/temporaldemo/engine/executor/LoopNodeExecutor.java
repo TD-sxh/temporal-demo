@@ -36,8 +36,10 @@ public class LoopNodeExecutor implements NodeExecutor {
             try {
                 shouldContinue = SpelEvaluator.evaluateBoolean(condition, context);
             } catch (Exception e) {
-                logger.warn("LOOP [{}]: condition evaluation failed: {}. Exiting loop.", node.getId(), e.getMessage());
-                break;
+                String msg = "LOOP [" + node.getId() + "]: condition evaluation failed: " + e.getMessage()
+                        + ". Hint: string literals in SpEL must use single quotes, e.g. #status == 'ACTIVE'";
+                logger.error(msg);
+                throw new RuntimeException(msg, e);
             }
 
             if (!shouldContinue) {

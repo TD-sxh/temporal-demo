@@ -1,0 +1,178 @@
+{
+  "id": "health-check-workflow-v2",
+  "name": "Health Check Workflow V2",
+  "version": 3,
+  "startNode": "start_1",
+  "initialVariables": {},
+  "nodes": [
+    {
+      "id": "start_1",
+      "name": "Start",
+      "type": "START",
+      "next": "task_2",
+      "inputSchema": [
+        { "name": "patientId", "type": "string", "required": true },
+        { "name": "patientName", "type": "string", "required": true },
+        { "name": "doctorName", "type": "string", "required": true },
+        { "name": "visitReason", "type": "string", "required": true },
+        { "name": "scenario", "type": "string", "required": true }
+      ]
+    },
+    {
+      "id": "task_2",
+      "name": "record_visit",
+      "type": "TASK",
+      "activityName": "recordVisit",
+      "input": {
+        "patientId": "#patientId",
+        "patientName": "#patientName",
+        "doctorName": "#doctorName",
+        "visitReason": "#visitReason"
+      },
+      "outputKey": { "#visitId": "*" },
+      "next": "task_3"
+    },
+    {
+      "id": "task_3",
+      "name": "get_diagnosis",
+      "type": "TASK",
+      "activityName": "getDiagnosisResult",
+      "input": {
+        "patientId": "#patientId",
+        "scenario": "#scenario"
+      },
+      "outputKey": {
+        "#diagnosis": "*",
+        "#score": "score"
+      },
+      "next": "task_4"
+    },
+    {
+      "id": "task_4",
+      "name": "analyze_results",
+      "type": "TASK",
+      "activityName": "analyzeResults",
+      "input": { "diagnosis": "#diagnosis" },
+      "outputKey": { "#severity": "*" },
+      "next": "branch_5"
+    },
+    {
+      "id": "branch_5",
+      "name": "Check if Severe",
+      "type": "BRANCH",
+      "branches": [
+        { "condition": "#severity == SEVERE", "next": "parallel_6" },
+        { "condition": "#severity == ABNORMAL", "next": "loop_8" },
+        { "condition": "#severity == NORMAL", "next": "task_7" }
+      ],
+      "defaultNext": null
+    },
+    {
+      "id": "parallel_6",
+      "name": "New Parallel",
+      "type": "PARALLEL",
+      "parallelBranches": [
+        {
+          "branchId": "branch_1",
+          "nodes": [
+            {
+              "id": "task_16",
+              "name": "email",
+              "type": "TASK",
+              "activityName": "sendEmail",
+              "input": {
+                "doctorName": "#doctorName",
+                "patientId": "#patientId",
+                "diagnosis": "#diagnosis"
+              },
+              "outputKey": {}
+            }
+          ]
+        },
+        {
+          "branchId": "branch_2",
+          "nodes": [
+            {
+              "id": "task_17",
+              "name": "sms",
+              "type": "TASK",
+              "activityName": "sendSms",
+              "input": {
+                "doctorName": "#doctorName",
+                "patientId": "#patientId",
+                "severity": "#severity"
+              },
+              "outputKey": {}
+            }
+          ]
+        }
+      ],
+      "next": "task_18"
+    },
+    {
+      "id": "task_18",
+      "name": "doctor",
+      "type": "TASK",
+      "activityName": "notifyDoctor",
+      "input": {
+        "doctorName": "#doctorName",
+        "patientId": "#patientId",
+        "severity": "#severity"
+      },
+      "outputKey": {},
+      "next": "loop_19"
+    },
+    {
+      "id": "loop_19",
+      "name": "New Loop",
+      "type": "LOOP",
+      "condition": "#followUpCount < 7",
+      "maxIterations": 10,
+      "loopBody": [
+        {
+          "id": "wait_21",
+          "name": "wait",
+          "type": "WAIT",
+          "signalName": "labResult",
+          "timeoutSeconds": 60,
+          "outputKey": { "#labSignal": "*" },
+          "timeoutNext": null,
+          "next": null
+        },
+        { "id": "task_22", "type": "TASK", "activityName": "processLabSignal" },
+        { "id": "task_23", "type": "TASK", "activityName": "performFollowUp" },
+        { "id": "task_24", "type": "TASK", "activityName": "updateFollowUpState" }
+      ],
+      "next": "task_9"
+    },
+    {
+      "id": "loop_8",
+      "name": "New Loop",
+      "type": "LOOP",
+      "condition": "#followUpCount < 5",
+      "maxIterations": 10,
+      "loopBody": [
+        { "id": "delay_11", "name": "delay 20s", "type": "DELAY", "delaySeconds": 20 },
+        { "id": "task_13", "name": "Perform Follow-Up", "type": "TASK", "activityName": "performFollowUp" },
+        { "id": "task_14", "name": "Update follow-up counters", "type": "TASK", "activityName": "updateFollowUpState" }
+      ],
+      "next": "task_9"
+    },
+    {
+      "id": "task_7",
+      "name": "sms notify",
+      "type": "TASK",
+      "activityName": "sendSms",
+      "input": { "doctorName": "#doctorName", "patientId": "#patientId" },
+      "next": "task_9"
+    },
+    {
+      "id": "task_9",
+      "name": "summary",
+      "type": "TASK",
+      "activityName": "buildSummary",
+      "next": "end_10"
+    },
+    { "id": "end_10", "name": "End", "type": "END" }
+  ]
+}

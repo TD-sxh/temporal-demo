@@ -47,14 +47,26 @@ services:
     container_name: engine-api
     depends_on:
       - temporal-server
-      - temporal-db
+      - definition-service
     environment:
       TEMPORAL_SERVER_TARGET: temporal-server:7233
+      DEFINITION_SERVICE_URL: http://definition-service:8082
+    ports:
+      - "8081:8081"
+
+  definition-service:
+    build:
+      context: .
+      dockerfile: definition-service/Dockerfile
+    container_name: definition-service
+    depends_on:
+      - temporal-db
+    environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://temporal-db:5432/engine
       SPRING_DATASOURCE_USERNAME: temporal
       SPRING_DATASOURCE_PASSWORD: temporal
     ports:
-      - "8081:8081"
+      - "8082:8082"
 
   engine-core:
     build:
@@ -73,5 +85,7 @@ services:
     container_name: health-check-worker
     depends_on:
       - temporal-server
+      - definition-service
     environment:
       TEMPORAL_SERVER_TARGET: temporal-server:7233
+      DEFINITION_SERVICE_URL: http://definition-service:8082

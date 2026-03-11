@@ -3,6 +3,7 @@ package com.example.temporaldemo.worker.config;
 import com.example.temporaldemo.engine.activity.ActivityHandlerRegistry;
 import com.example.temporaldemo.engine.activity.GenericActivityImpl;
 import com.example.temporaldemo.engine.handlers.*;
+import com.example.temporaldemo.engine.model.ActivityInfo;
 import io.temporal.client.WorkflowClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.serviceclient.WorkflowServiceStubsOptions;
@@ -16,6 +17,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
+
+import java.util.List;
 
 @Configuration
 public class HealthCheckWorkerConfig {
@@ -48,16 +51,36 @@ public class HealthCheckWorkerConfig {
     @Bean
     public ActivityHandlerRegistry activityHandlerRegistry() {
         ActivityHandlerRegistry registry = new ActivityHandlerRegistry();
-        registry.register("recordVisit", new RecordVisitHandler());
-        registry.register("getDiagnosisResult", new GetDiagnosisHandler());
-        registry.register("analyzeResults", new AnalyzeResultsHandler());
-        registry.register("notifyDoctor", new NotifyDoctorHandler());
-        registry.register("sendEmail", new SendEmailHandler());
-        registry.register("sendSms", new SendSmsHandler());
-        registry.register("processLabSignal", new ProcessLabSignalHandler());
-        registry.register("performFollowUp", new PerformFollowUpHandler());
-        registry.register("updateFollowUpState", new UpdateFollowUpStateHandler());
-        registry.register("buildSummary", new BuildSummaryHandler());
+        registry.register("recordVisit", new RecordVisitHandler(),
+                ActivityInfo.of("Records a patient visit and returns a visitId",
+                        List.of("patientId", "patientName", "doctorName", "visitReason"), "string"));
+        registry.register("getDiagnosisResult", new GetDiagnosisHandler(),
+                ActivityInfo.of("Retrieves diagnosis result for a patient",
+                        List.of("patientId", "scenario"), "map"));
+        registry.register("analyzeResults", new AnalyzeResultsHandler(),
+                ActivityInfo.of("Analyzes diagnosis and returns severity level",
+                        List.of("diagnosis"), "string"));
+        registry.register("notifyDoctor", new NotifyDoctorHandler(),
+                ActivityInfo.of("Sends a notification to the attending doctor",
+                        List.of("doctorName", "patientId", "severity"), "string"));
+        registry.register("sendEmail", new SendEmailHandler(),
+                ActivityInfo.of("Sends an email notification with diagnosis details",
+                        List.of("doctorName", "patientId", "diagnosis"), "map"));
+        registry.register("sendSms", new SendSmsHandler(),
+                ActivityInfo.of("Sends an SMS alert for severe cases",
+                        List.of("doctorName", "patientId", "severity"), "map"));
+        registry.register("processLabSignal", new ProcessLabSignalHandler(),
+                ActivityInfo.of("Processes an incoming lab result signal",
+                        List.of("labSignal", "currentScore"), "number"));
+        registry.register("performFollowUp", new PerformFollowUpHandler(),
+                ActivityInfo.of("Performs a follow-up check for the patient",
+                        List.of("patientId", "followUpCount", "severity", "currentScore"), "map"));
+        registry.register("updateFollowUpState", new UpdateFollowUpStateHandler(),
+                ActivityInfo.of("Updates follow-up counters and severity after each iteration",
+                        List.of("followUpResult", "followUpCount"), "map"));
+        registry.register("buildSummary", new BuildSummaryHandler(),
+                ActivityInfo.of("Builds a final summary report for the visit",
+                        List.of("patientId", "severity", "followUpCount", "visitId"), "map"));
         return registry;
     }
 

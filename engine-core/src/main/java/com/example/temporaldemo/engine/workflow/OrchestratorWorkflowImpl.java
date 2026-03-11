@@ -96,7 +96,7 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         } catch (Exception e) {
             logger.error("Failed to parse workflow definition: {}", e.getMessage());
             context.setStatusMessage("ERROR: " + e.getMessage());
-            return context.getAllVariables();
+            throw new RuntimeException("Failed to parse workflow definition: " + e.getMessage(), e);
         }
 
         logger.info("Orchestrator starting workflow: {} (version={})", definition.getName(), definition.getVersion());
@@ -122,9 +122,10 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         while (currentNodeId != null) {
             NodeDefinition node = nodeMap.get(currentNodeId);
             if (node == null) {
-                logger.error("Node not found: '{}'. Ending workflow.", currentNodeId);
-                context.setStatusMessage("ERROR: Node not found: " + currentNodeId);
-                break;
+                String msg = "Node not found: " + currentNodeId;
+                logger.error(msg);
+                context.setStatusMessage("ERROR: " + msg);
+                throw new RuntimeException(msg);
             }
 
             context.setCurrentNodeId(currentNodeId);

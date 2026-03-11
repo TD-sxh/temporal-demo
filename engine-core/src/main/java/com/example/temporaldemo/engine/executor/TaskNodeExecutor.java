@@ -45,43 +45,35 @@ public class TaskNodeExecutor implements NodeExecutor {
     }
 
     /**
-     * Store activity result into workflow context.
+     * Store activity result into workflow context using the outputKey mapping.
+     *
+     * <p>outputKey is a Map where:
      * <ul>
-     *   <li>String outputKey: store whole result under that key; explode if result is a Map</li>
-     *   <li>Map outputKey: selective field mapping {contextVar: resultField}, "*" = whole result</li>
+     *   <li>Key with '#' prefix (e.g. "#visitId") → strip '#', store as global context variable "visitId"</li>
+     *   <li>Key without '#' prefix → store as-is in context</li>
+     *   <li>Value "*" → store the entire activity result</li>
+     *   <li>Other value (e.g. "status") → extract that field from the result Map</li>
      * </ul>
      */
     @SuppressWarnings("unchecked")
     static void storeOutput(NodeDefinition node, WorkflowContext context, Object result) {
-        Object outputKey = node.getOutputKey();
-        if (outputKey == null) return;
+        Map<String, String> outputKey = node.getOutputKey();
+        if (outputKey == null || outputKey.isEmpty()) return;
 
-        if (outputKey instanceof String) {
-            String key = (String) outputKey;
-            if (key.isEmpty()) return;
-            context.setNodeOutput(key, result);
+        for (Map.Entry<String, String> entry : outputKey.entrySet()) {
+            String rawKey = entry.getKey();
+            String sourceField = entry.getValue();
 
-            // Explode Map result entries as individual variables
-            if (result instanceof Map) {
-                Map<String, Object> mapResult = (Map<String, Object>) result;
-                for (Map.Entry<String, Object> entry : mapResult.entrySet()) {
-                    context.setVariable(entry.getKey(), entry.getValue());
-                }
-            }
-        } else if (outputKey instanceof Map) {
-            Map<String, String> mapping = (Map<String, String>) outputKey;
-            for (Map.Entry<String, String> entry : mapping.entrySet()) {
-                String contextKey = entry.getKey();
-                String sourceField = entry.getValue();
+            // Strip '#' prefix to get the actual variable name
+            String contextKey = rawKey.startsWith("#") ? rawKey.substring(1) : rawKey;
 
-                if ("*".equals(sourceField)) {
-                    // Store the entire result
-                    context.setNodeOutput(contextKey, result);
-                } else if (result instanceof Map) {
-                    // Extract specific field from result Map
-                    Map<String, Object> resultMap = (Map<String, Object>) result;
-                    context.setNodeOutput(contextKey, resultMap.get(sourceField));
-                }
+            if ("*".equals(sourceField)) {
+                // Store the entire result
+                context.setNodeOutput(contextKey, result);
+            } else if (result instanceof Map) {
+                // Extract specific field from result Map
+                Map<String, Object> resultMap = (Map<String, Object>) result;
+                context.setNodeOutput(contextKey, resultMap.get(sourceField));
             }
         }
     }
