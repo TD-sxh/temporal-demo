@@ -125,6 +125,11 @@ public class EngineController {
                         .setWorkflowId(workflowId)
                         .setWorkflowExecutionTimeout(Duration.ofHours(24))
                         .setWorkflowIdReusePolicy(WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+                        .setMemo(Map.of(
+                                "json_id", type,
+                                "definition_type", type,
+                                "definition_version", String.valueOf(resolved.version())
+                        ))
                         .build());
 
         WorkflowClient.start(workflow::execute, resolved.definitionJson(), enrichedVars);

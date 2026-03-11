@@ -19,5 +19,7 @@ public enum NodeType {
     /** Loops over a body of nodes based on a SpEL condition */
     LOOP,
     /** Waits for a fixed duration before continuing */
-    DELAY
+    DELAY,
+    /** Human task node: sends notifications (SMS/Email/Phone) and waits for a manual signal */
+    HUMAN_TASK
 }

@@ -126,6 +126,10 @@ public class NodeDefinition {
     /** Delay duration in seconds */
     private int delaySeconds;
 
+    // --- HUMAN_TASK ---
+    /** Human task configuration: channels, recipient, message, timeout. */
+    private HumanTaskConfig humanTask;
+
     // --- START ---
     /** Input parameter schema for START nodes (array of InputParam with name/type/required/default/description). */
     private List<InputParam> inputSchema;
@@ -183,6 +187,9 @@ public class NodeDefinition {
 
     public int getDelaySeconds() { return delaySeconds; }
     public void setDelaySeconds(int delaySeconds) { this.delaySeconds = delaySeconds; }
+
+    public HumanTaskConfig getHumanTask() { return humanTask; }
+    public void setHumanTask(HumanTaskConfig humanTask) { this.humanTask = humanTask; }
 
     public List<InputParam> getInputSchema() { return inputSchema; }
     public void setInputSchema(List<InputParam> inputSchema) { this.inputSchema = inputSchema; }

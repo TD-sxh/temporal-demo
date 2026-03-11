@@ -1,7 +1,7 @@
 {
   "id": "health-check-workflow-v2",
   "name": "Health Check Workflow V2",
-  "version": 3,
+  "version": 2,
   "startNode": "start_1",
   "initialVariables": {},
   "nodes": [
@@ -67,7 +67,6 @@
         "message": "Please review the diagnosis results for the patient and approve to continue the health check workflow.",
         "timeoutSeconds": 120
       },
-      "outputKey": { "#result": "*" },
       "next": "branch_5"
     },
     {

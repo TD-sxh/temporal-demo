@@ -42,9 +42,23 @@ public interface OrchestratorWorkflow {
     void signal(String signalName, Object payload);
 
     /**
+     * Pause the workflow. Execution halts after the current node completes.
+     * Send a {@link #resume()} signal to continue.
+     */
+    @SignalMethod
+    void pause();
+
+    /**
+     * Resume a paused workflow.
+     */
+    @SignalMethod
+    void resume();
+
+    /**
      * Query the current workflow status.
      *
-     * @return a snapshot including current node, variables, and status message
+     * @return a snapshot including current node, variables, paused state,
+     *         and {@code pendingHumanTaskId} when a HUMAN_TASK node is waiting
      */
     @QueryMethod
     Map<String, Object> getStatus();

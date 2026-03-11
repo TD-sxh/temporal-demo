@@ -1,6 +1,5 @@
 package com.example.temporaldemo.engine.workflow;
 
-import com.example.temporaldemo.engine.activity.GenericActivity;
 import com.example.temporaldemo.engine.context.WorkflowContext;
 import com.example.temporaldemo.engine.executor.*;
 import com.example.temporaldemo.engine.model.NodeDefinition;
@@ -9,6 +8,7 @@ import com.example.temporaldemo.engine.model.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
+import io.temporal.workflow.ActivityStub;
 import io.temporal.workflow.Workflow;
 import org.slf4j.Logger;
 
@@ -39,9 +39,8 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
     // Workflow context — holds all state
     private final WorkflowContext context = new WorkflowContext();
 
-    // Activity stub
-    private final GenericActivity genericActivity = Workflow.newActivityStub(
-            GenericActivity.class,
+    // Untyped activity stub — no compile-time dependency on activity interfaces
+    private final ActivityStub activityStub = Workflow.newUntypedActivityStub(
             ActivityOptions.newBuilder()
                     .setStartToCloseTimeout(Duration.ofMinutes(5))
                     .setRetryOptions(RetryOptions.newBuilder()
@@ -50,6 +49,12 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
                             .build())
                     .build());
 
+    // Pause/resume flag — controlled via signals from workflow-admin
+    private boolean paused = false;
+
+    // Child workflow ID of the currently waiting HUMAN_TASK node (null when idle)
+    private String pendingHumanTaskId = null;
+
     // Node executor registry
     private final NodeExecutorRegistry executorRegistry = new NodeExecutorRegistry();
 
@@ -57,12 +62,14 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         // Register all node executors
         executorRegistry.register(NodeType.START, new StartEndNodeExecutor());
         executorRegistry.register(NodeType.END, new StartEndNodeExecutor());
-        executorRegistry.register(NodeType.TASK, new TaskNodeExecutor(genericActivity));
+        executorRegistry.register(NodeType.TASK, new TaskNodeExecutor(activityStub));
         executorRegistry.register(NodeType.BRANCH, new BranchNodeExecutor());
         executorRegistry.register(NodeType.WAIT, new WaitNodeExecutor());
         executorRegistry.register(NodeType.PARALLEL, new ParallelNodeExecutor(executorRegistry));
         executorRegistry.register(NodeType.LOOP, new LoopNodeExecutor(executorRegistry));
         executorRegistry.register(NodeType.DELAY, new DelayNodeExecutor());
+        executorRegistry.register(NodeType.HUMAN_TASK, new HumanTaskNodeExecutor(
+                id -> pendingHumanTaskId = id));
     }
 
     // ─── Signal ─────────────────────────────────────
@@ -73,6 +80,19 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         context.addSignal(signalName, payload);
     }
 
+    @Override
+    public void pause() {
+        logger.info("Workflow paused.");
+        paused = true;
+        context.setStatusMessage("PAUSED");
+    }
+
+    @Override
+    public void resume() {
+        logger.info("Workflow resumed.");
+        paused = false;
+    }
+
     // ─── Query ──────────────────────────────────────
 
     @Override
@@ -80,6 +100,10 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         Map<String, Object> status = new LinkedHashMap<>();
         status.put("currentNodeId", context.getCurrentNodeId());
         status.put("statusMessage", context.getStatusMessage());
+        status.put("paused", paused);
+        if (pendingHumanTaskId != null) {
+            status.put("pendingHumanTaskId", pendingHumanTaskId);
+        }
         status.put("variables", context.getAllVariables());
         return status;
     }
@@ -127,6 +151,12 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
                 context.setStatusMessage("ERROR: " + msg);
                 throw new RuntimeException(msg);
             }
+
+            // Block here if paused — resumes when resume() signal is received
+            if (paused) {
+                context.setStatusMessage("PAUSED at " + currentNodeId);
+            }
+            Workflow.await(() -> !paused);
 
             context.setCurrentNodeId(currentNodeId);
             context.setStatusMessage("EXECUTING: " + currentNodeId);

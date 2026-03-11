@@ -1,9 +1,9 @@
 package com.example.temporaldemo.engine.executor;
 
-import com.example.temporaldemo.engine.activity.GenericActivity;
 import com.example.temporaldemo.engine.context.WorkflowContext;
 import com.example.temporaldemo.engine.expression.SpelEvaluator;
 import com.example.temporaldemo.engine.model.NodeDefinition;
+import io.temporal.workflow.ActivityStub;
 import io.temporal.workflow.Workflow;
 import org.slf4j.Logger;
 
@@ -20,23 +20,28 @@ public class TaskNodeExecutor implements NodeExecutor {
 
     private static final Logger logger = Workflow.getLogger(TaskNodeExecutor.class);
 
-    private final GenericActivity activityStub;
+    private final ActivityStub activityStub;
 
-    public TaskNodeExecutor(GenericActivity activityStub) {
+    public TaskNodeExecutor(ActivityStub activityStub) {
         this.activityStub = activityStub;
     }
 
     @Override
     public String execute(NodeDefinition node, WorkflowContext context) {
-        String activityName = node.getActivityName();
+        // Temporal registers activity methods with PascalCase (e.g. "RecordVisit").
+        // JSON definitions use camelCase (e.g. "recordVisit"). Capitalize first letter to match.
+        String rawName = node.getActivityName();
+        String activityName = rawName == null || rawName.isEmpty()
+                ? rawName
+                : Character.toUpperCase(rawName.charAt(0)) + rawName.substring(1);
         logger.info("TASK [{}]: executing activity '{}'", node.getId(), activityName);
 
         // Resolve SpEL expressions in input map
         Map<String, Object> resolvedInput = SpelEvaluator.resolveInputs(node.getInput(), context);
         logger.info("TASK [{}]: resolved input keys: {}", node.getId(), resolvedInput.keySet());
 
-        // Call the generic activity
-        Object result = activityStub.execute(activityName, resolvedInput);
+        // Call the activity by name (untyped) — maps to @ActivityMethod in the worker
+        Object result = activityStub.execute(activityName, Object.class, resolvedInput);
 
         // Store result in context — supports String or Map<String,String> outputKey
         storeOutput(node, context, result);

@@ -12,12 +12,18 @@ services:
       - "5432:5432"
     volumes:
       - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   temporal-server:
     image: temporalio/auto-setup:1.29.2
     container_name: temporal-server
     depends_on:
-      - temporal-db
+      temporal-db:
+        condition: service_healthy
     environment:
       DB: postgres12
       DBNAME: temporal
@@ -28,12 +34,19 @@ services:
       DB_PORT: 5432
     ports:
       - "7233:7233"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 7233 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
   temporal-ui:
     image: temporalio/ui:2.34.0
     container_name: temporal-ui
     depends_on:
-      - temporal-server
+      temporal-server:
+        condition: service_healthy
     environment:
       TEMPORAL_ADDRESS: temporal-server:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:8080
@@ -46,8 +59,10 @@ services:
       dockerfile: engine-api/Dockerfile
     container_name: engine-api
     depends_on:
-      - temporal-server
-      - definition-service
+      temporal-server:
+        condition: service_healthy
+      definition-service:
+        condition: service_started
     environment:
       TEMPORAL_SERVER_TARGET: temporal-server:7233
       DEFINITION_SERVICE_URL: http://definition-service:8082
@@ -60,7 +75,8 @@ services:
       dockerfile: definition-service/Dockerfile
     container_name: definition-service
     depends_on:
-      - temporal-db
+      temporal-db:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://temporal-db:5432/engine
       SPRING_DATASOURCE_USERNAME: temporal
@@ -74,7 +90,8 @@ services:
       dockerfile: engine-core/Dockerfile
     container_name: engine-core
     depends_on:
-      - temporal-server
+      temporal-server:
+        condition: service_healthy
     environment:
       TEMPORAL_SERVER_TARGET: temporal-server:7233
 
@@ -84,8 +101,23 @@ services:
       dockerfile: health-check-worker/Dockerfile
     container_name: health-check-worker
     depends_on:
-      - temporal-server
-      - definition-service
+      temporal-server:
+        condition: service_healthy
+      definition-service:
+        condition: service_started
     environment:
       TEMPORAL_SERVER_TARGET: temporal-server:7233
       DEFINITION_SERVICE_URL: http://definition-service:8082
+
+  workflow-admin:
+    build:
+      context: .
+      dockerfile: workflow-admin/Dockerfile
+    container_name: workflow-admin
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+    environment:
+      TEMPORAL_SERVER_TARGET: temporal-server:7233
+    ports:
+      - "8083:8083"
