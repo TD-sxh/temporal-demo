@@ -8,6 +8,7 @@ import com.example.temporaldemo.engine.model.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
+import io.temporal.common.SearchAttributeKey;
 import io.temporal.workflow.ActivityStub;
 import io.temporal.workflow.Workflow;
 import org.slf4j.Logger;
@@ -36,6 +37,9 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
 
     private static final Logger logger = Workflow.getLogger(OrchestratorWorkflowImpl.class);
 
+    private static final SearchAttributeKey<String> CUSTOM_STATUS =
+            SearchAttributeKey.forKeyword("customStatus");
+
     // Workflow context — holds all state
     private final WorkflowContext context = new WorkflowContext();
 
@@ -52,8 +56,8 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
     // Pause/resume flag — controlled via signals from workflow-admin
     private boolean paused = false;
 
-    // Child workflow ID of the currently waiting HUMAN_TASK node (null when idle)
-    private String pendingHumanTaskId = null;
+    // Child workflow ID of the currently waiting DIGITAL_MESSAGE node (null when idle)
+    private String pendingDigitalMessageId = null;
 
     // Node executor registry
     private final NodeExecutorRegistry executorRegistry = new NodeExecutorRegistry();
@@ -68,8 +72,8 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         executorRegistry.register(NodeType.PARALLEL, new ParallelNodeExecutor(executorRegistry));
         executorRegistry.register(NodeType.LOOP, new LoopNodeExecutor(executorRegistry));
         executorRegistry.register(NodeType.DELAY, new DelayNodeExecutor());
-        executorRegistry.register(NodeType.HUMAN_TASK, new HumanTaskNodeExecutor(
-                id -> pendingHumanTaskId = id));
+        executorRegistry.register(NodeType.DIGITAL_MESSAGE, new DigitalMessageNodeExecutor(
+                id -> pendingDigitalMessageId = id));
     }
 
     // ─── Signal ─────────────────────────────────────
@@ -85,12 +89,26 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         logger.info("Workflow paused.");
         paused = true;
         context.setStatusMessage("PAUSED");
+        Workflow.upsertTypedSearchAttributes(CUSTOM_STATUS.valueSet("PAUSED"));
+        // Forward pause to any active DIGITAL_MESSAGE child workflow
+        if (pendingDigitalMessageId != null) {
+            Workflow.newUntypedExternalWorkflowStub(pendingDigitalMessageId)
+                    .signal("pauseDigitalMessage");
+            logger.info("Forwarded pause to DM child: {}", pendingDigitalMessageId);
+        }
     }
 
     @Override
     public void resume() {
         logger.info("Workflow resumed.");
         paused = false;
+        Workflow.upsertTypedSearchAttributes(CUSTOM_STATUS.valueSet("RUNNING"));
+        // Forward resume to any active DIGITAL_MESSAGE child workflow
+        if (pendingDigitalMessageId != null) {
+            Workflow.newUntypedExternalWorkflowStub(pendingDigitalMessageId)
+                    .signal("resumeDigitalMessage");
+            logger.info("Forwarded resume to DM child: {}", pendingDigitalMessageId);
+        }
     }
 
     // ─── Query ──────────────────────────────────────
@@ -101,9 +119,10 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
         status.put("currentNodeId", context.getCurrentNodeId());
         status.put("statusMessage", context.getStatusMessage());
         status.put("paused", paused);
-        if (pendingHumanTaskId != null) {
-            status.put("pendingHumanTaskId", pendingHumanTaskId);
+        if (pendingDigitalMessageId != null) {
+            status.put("pendingDigitalMessageId", pendingDigitalMessageId);
         }
+        status.put("nodeHistory", context.getNodeHistory());
         status.put("variables", context.getAllVariables());
         return status;
     }
@@ -162,9 +181,24 @@ public class OrchestratorWorkflowImpl implements OrchestratorWorkflow {
             context.setStatusMessage("EXECUTING: " + currentNodeId);
             logger.info(">>> Executing node: {} [{}]", node.getId(), node.getType());
 
+            // Record node start in history
+            Map<String, Object> histEntry = context.startNodeHistory(
+                    node.getId(), node.getType().name(), Workflow.currentTimeMillis());
+
             // Execute the node
             NodeExecutor executor = executorRegistry.getExecutor(node.getType());
-            String nextNodeId = executor.execute(node, context);
+            String nextNodeId;
+            try {
+                nextNodeId = executor.execute(node, context);
+                histEntry.put("status", "COMPLETED");
+                histEntry.put("completedAt", Workflow.currentTimeMillis());
+                if (nextNodeId != null) histEntry.put("next", nextNodeId);
+            } catch (Exception e) {
+                histEntry.put("status", "FAILED");
+                histEntry.put("completedAt", Workflow.currentTimeMillis());
+                histEntry.put("error", e.getMessage());
+                throw e;
+            }
 
             logger.info("<<< Node {} completed. Next: {}", node.getId(), nextNodeId);
             currentNodeId = nextNodeId;

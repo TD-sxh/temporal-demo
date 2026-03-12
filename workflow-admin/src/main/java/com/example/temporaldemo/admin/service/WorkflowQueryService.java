@@ -70,7 +70,25 @@ public class WorkflowQueryService {
         // Exclude child workflows (HumanTask child flows) — they are nested under their parent
         List<Map<String, Object>> workflows = response.getExecutionsList().stream()
                 .filter(info -> !isChildWorkflow(info.getExecution().getWorkflowId()))
-                .map(this::toInfoMap)
+                .map(info -> {
+                    Map<String, Object> item = toInfoMap(info);
+                    // Enrich RUNNING workflows with live paused state via getStatus() query.
+                    // (Postgres standard-visibility doesn't include SearchAttributes in list response)
+                    if ("RUNNING".equals(item.get("status"))) {
+                        try {
+                            WorkflowStub stub = workflowClient.newUntypedWorkflowStub(
+                                    info.getExecution().getWorkflowId(), Optional.empty(), Optional.empty());
+                            Map<?, ?> runtimeStatus = stub.query("getStatus", Map.class);
+                            Boolean paused = (Boolean) runtimeStatus.get("paused");
+                            if (Boolean.TRUE.equals(paused)) {
+                                item.put("status", "PAUSED");
+                            }
+                        } catch (Exception e) {
+                            logger.info("Could not query paused state for {}: {}", info.getExecution().getWorkflowId(), e.getMessage());
+                        }
+                    }
+                    return item;
+                })
                 .toList();
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -113,11 +131,16 @@ public class WorkflowQueryService {
                 Map<?, ?> runtimeStatus = stub.query("getStatus", Map.class);
                 detail.put("runtimeStatus", runtimeStatus);
 
-                // If a HUMAN_TASK child workflow is pending, embed its detail
-                Object childId = runtimeStatus.get("pendingHumanTaskId");
+                // Reflect PAUSED state in top-level status (same as list endpoint)
+                if (Boolean.TRUE.equals(runtimeStatus.get("paused"))) {
+                    detail.put("status", "PAUSED");
+                }
+
+                // If a DIGITAL_MESSAGE child workflow is pending, embed its detail
+                Object childId = runtimeStatus.get("pendingDigitalMessageId");
                 if (childId != null) {
                     try {
-                        detail.put("pendingHumanTask", describeChildWorkflow(childId.toString()));
+                        detail.put("pendingDigitalMessage", describeChildWorkflow(childId.toString()));
                     } catch (Exception ex) {
                         logger.debug("Could not describe child workflow {}: {}", childId, ex.getMessage());
                     }
@@ -146,9 +169,9 @@ public class WorkflowQueryService {
         return child;
     }
 
-    /** Child workflows created by HumanTaskNodeExecutor follow the pattern: parent__humanTask__nodeId */
+    /** Child workflows follow the pattern: parent__digitalMessage__nodeId */
     private static boolean isChildWorkflow(String workflowId) {
-        return workflowId != null && workflowId.contains("__humanTask__");
+        return workflowId != null && workflowId.contains("__digitalMessage__");
     }
 
     // ─── Event History ────────────────────────────────
@@ -213,22 +236,18 @@ public class WorkflowQueryService {
     }
 
     /**
-     * Send an action signal to the currently waiting HUMAN_TASK child workflow.
-     *
-     * <p>The child workflow ID is discovered by first calling {@link #describeWorkflow(String)}
-     * on the parent, then reading the {@code pendingHumanTaskId} field from
-     * {@code runtimeStatus}. The signal is sent directly to the child workflow.
+     * Send an action signal to the currently waiting DIGITAL_MESSAGE child workflow.
      *
      * @param parentWorkflowId the parent (orchestrator) workflow ID
-     * @param action           one of: execute, skip, terminate
+     * @param action           one of: execute, skip, terminate, cancel
      */
-    public Map<String, Object> humanTaskSignal(String parentWorkflowId, String action) {
+    public Map<String, Object> digitalMessageSignal(String parentWorkflowId, String action) {
         // Resolve child workflow ID from parent status
-        String childWorkflowId = resolvePendingHumanTaskId(parentWorkflowId);
+        String childWorkflowId = resolvePendingDigitalMessageId(parentWorkflowId);
 
         workflowClient.newUntypedWorkflowStub(childWorkflowId, Optional.empty(), Optional.empty())
-                .signal("humanTaskSignal", action);
-        logger.info("Sent humanTaskSignal '{}' to child workflow: {}", action, childWorkflowId);
+                .signal("digitalMessageSignal", action);
+        logger.info("Sent digitalMessage action '{}' to child workflow: {}", action, childWorkflowId);
 
         return Map.of(
                 "parentWorkflowId", parentWorkflowId,
@@ -237,25 +256,25 @@ public class WorkflowQueryService {
     }
 
     /**
-     * Queries the parent workflow for the {@code pendingHumanTaskId} field.
-     * Throws if no HUMAN_TASK is currently waiting.
+     * Queries the parent workflow for the {@code pendingDigitalMessageId} field.
+     * Throws if no DIGITAL_MESSAGE node is currently waiting.
      */
-    private String resolvePendingHumanTaskId(String parentWorkflowId) {
+    private String resolvePendingDigitalMessageId(String parentWorkflowId) {
         try {
             WorkflowStub stub = workflowClient.newUntypedWorkflowStub(
                     parentWorkflowId, Optional.empty(), Optional.empty());
             Map<?, ?> status = stub.query("getStatus", Map.class);
-            Object childId = status.get("pendingHumanTaskId");
+            Object childId = status.get("pendingDigitalMessageId");
             if (childId == null) {
                 throw new IllegalStateException(
-                        "Workflow '" + parentWorkflowId + "' has no pending HUMAN_TASK at this time.");
+                        "Workflow '" + parentWorkflowId + "' has no pending DIGITAL_MESSAGE at this time.");
             }
             return childId.toString();
         } catch (IllegalStateException e) {
             throw e;
         } catch (Exception e) {
             throw new IllegalStateException(
-                    "Failed to resolve pendingHumanTaskId for workflow '" + parentWorkflowId + "': " + e.getMessage(), e);
+                    "Failed to resolve pendingDigitalMessageId for workflow '" + parentWorkflowId + "': " + e.getMessage(), e);
         }
     }
 
@@ -378,7 +397,18 @@ public class WorkflowQueryService {
         map.put("workflowId", info.getExecution().getWorkflowId());
         map.put("runId", info.getExecution().getRunId());
         map.put("workflowType", info.getType().getName());
-        map.put("status", toStatusString(info.getStatus()));
+        // Prefer customStatus search attribute (e.g. "PAUSED") over the native Temporal status
+        String nativeStatus = toStatusString(info.getStatus());
+        String displayStatus = nativeStatus;
+        if ("RUNNING".equals(nativeStatus) && info.hasSearchAttributes()) {
+            var saMap = info.getSearchAttributes().getIndexedFieldsMap();
+            if (saMap.containsKey("customStatus")) {
+                String raw = saMap.get("customStatus").getData().toStringUtf8();
+                if (raw.startsWith("\"") && raw.endsWith("\"")) raw = raw.substring(1, raw.length() - 1);
+                displayStatus = raw;
+            }
+        }
+        map.put("status", displayStatus);
         map.put("taskQueue", info.getTaskQueue());
         if (info.hasStartTime()) {
             map.put("startTime", Instant.ofEpochSecond(

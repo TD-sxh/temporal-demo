@@ -1,7 +1,9 @@
 package com.example.temporaldemo.engine.context;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -32,6 +34,9 @@ public class WorkflowContext {
 
     /** Overall status description */
     private String statusMessage = "RUNNING";
+
+    /** Per-node execution history — entries are mutable maps updated in-place */
+    private final List<Map<String, Object>> nodeHistory = new ArrayList<>();
 
     // ─── Variables ──────────────────────────────────
 
@@ -104,6 +109,25 @@ public class WorkflowContext {
     public boolean hasSignal(String signalName) {
         ConcurrentLinkedQueue<Object> queue = pendingSignals.get(signalName);
         return queue != null && !queue.isEmpty();
+    }
+
+    // ─── Node History ────────────────────────────────
+
+    /**
+     * Add a new node execution entry. Returns the entry so the caller can mutate it later.
+     */
+    public Map<String, Object> startNodeHistory(String nodeId, String nodeType, long startedAt) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("nodeId", nodeId);
+        entry.put("nodeType", nodeType);
+        entry.put("status", "EXECUTING");
+        entry.put("startedAt", startedAt);
+        nodeHistory.add(entry);
+        return entry;
+    }
+
+    public List<Map<String, Object>> getNodeHistory() {
+        return Collections.unmodifiableList(nodeHistory);
     }
 
     // ─── Status / Diagnostics ───────────────────────

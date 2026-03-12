@@ -95,17 +95,17 @@ public class WorkflowAdminController {
     }
 
     /**
-     * POST /api/workflows/{workflowId}/human-task
-     * Send an action signal to the currently waiting HUMAN_TASK node.
+     * POST /api/workflows/{workflowId}/digital-message
+     * Send an action signal to the currently waiting DIGITAL_MESSAGE node.
      *
-     * Request body: { "action": "execute" | "skip" | "terminate" }
+     * Request body: { "action": "execute" | "skip" | "terminate" | "cancel" }
      *
      * The service resolves the child workflow ID automatically from the parent's
-     * runtime status ({@code pendingHumanTaskId}). Returns 409 if no HUMAN_TASK
+     * runtime status ({@code pendingDigitalMessageId}). Returns 409 if no DIGITAL_MESSAGE
      * is currently waiting.
      */
-    @PostMapping("/{workflowId}/human-task")
-    public ResponseEntity<Map<String, Object>> humanTaskSignal(
+    @PostMapping("/{workflowId}/digital-message")
+    public ResponseEntity<Map<String, Object>> digitalMessageSignal(
             @PathVariable String workflowId,
             @RequestBody Map<String, String> body) {
         String action = body.get("action");
@@ -115,7 +115,7 @@ public class WorkflowAdminController {
                                  "supported", "execute, skip, terminate"));
         }
         try {
-            Map<String, Object> result = queryService.humanTaskSignal(workflowId, action);
+            Map<String, Object> result = queryService.digitalMessageSignal(workflowId, action);
             return ResponseEntity.ok(result);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409)

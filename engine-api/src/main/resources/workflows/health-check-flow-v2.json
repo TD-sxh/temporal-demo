@@ -54,20 +54,32 @@
       "activityName": "analyzeResults",
       "input": { "diagnosis": "#diagnosis" },
       "outputKey": { "#severity": "*" },
-      "next": "human_task_doctor_approval"
+      "next": "digital_message_doctor_approval"
     },
     {
-      "id": "human_task_doctor_approval",
+      "id": "digital_message_doctor_approval",
       "name": "Doctor Approval",
-      "type": "HUMAN_TASK",
-      "humanTask": {
-        "channels": ["EMAIL", "SMS", "PHONE"],
-        "to": "doctor@hospital.com",
-        "phone": "+1234567890",
-        "message": "Please review the diagnosis results for the patient and approve to continue the health check workflow.",
-        "timeoutSeconds": 120
+      "type": "DIGITAL_MESSAGE",
+      "digitalMessage": {
+        "channels": ["EMAIL", "SMS"],
+        "emailConfig": {
+          "fromEmail": "noreply@hospital.com",
+          "cc": "doctor@hospital.com",
+          "bcc": "admin@hospital.com",
+          "message": "Please review the diagnosis results for the patient and approve to continue the health check workflow."
+        },
+        "smsConfig": {
+          "fromPhone": "+1234567890",
+          "message": "Please review the diagnosis results for the patient and approve to continue."
+        },
+        "timeout": { "value": 2, "unit": "minutes" },
+        "responseStrategy": "ALL",
+        "input": {
+          "toEmail": "#doctorEmail",
+          "toPhone": "#doctorPhone"
+        },
+        "outputKey": {}
       },
-      "outputKey": { "#result": "*" },
       "next": "branch_5"
     },
     {
@@ -153,9 +165,13 @@
           "timeoutNext": null,
           "next": null
         },
-        { "id": "task_22", "type": "TASK", "activityName": "processLabSignal" },
-        { "id": "task_23", "type": "TASK", "activityName": "performFollowUp" },
-        { "id": "task_24", "type": "TASK", "activityName": "updateFollowUpState" }
+        { "id": "task_22", "type": "TASK", "activityName": "processLabSignal", "input": {}, "outputKey": {},
+          "next": "task_23"
+        },
+        { "id": "task_23", "type": "TASK", "activityName": "performFollowUp", "input": {}, "outputKey": {},
+          "next": "task_24"
+        },
+        { "id": "task_24", "type": "TASK", "activityName": "updateFollowUpState", "input": {}, "outputKey": {} }
       ],
       "next": "task_9"
     },
@@ -166,9 +182,11 @@
       "condition": "#followUpCount < 5",
       "maxIterations": 10,
       "loopBody": [
-        { "id": "delay_11", "name": "delay 20s", "type": "DELAY", "delaySeconds": 20 },
-        { "id": "task_13", "name": "Perform Follow-Up", "type": "TASK", "activityName": "performFollowUp" },
-        { "id": "task_14", "name": "Update follow-up counters", "type": "TASK", "activityName": "updateFollowUpState" }
+        { "id": "delay_11", "name": "delay 20s", "type": "DELAY", "delaySeconds": 20, "input": {}, "outputKey": {},
+          "next": "task_13" },
+        { "id": "task_13", "name": "Perform Follow-Up", "type": "TASK", "activityName": "performFollowUp", "input": {}, "outputKey": {},
+          "next": "task_14" },
+        { "id": "task_14", "name": "Update follow-up counters", "type": "TASK", "activityName": "updateFollowUpState", "input": {}, "outputKey": {}}
       ],
       "next": "task_9"
     },

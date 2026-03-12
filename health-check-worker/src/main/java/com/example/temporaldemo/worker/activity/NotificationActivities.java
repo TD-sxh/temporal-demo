@@ -29,6 +29,8 @@ public interface NotificationActivities {
      * Activity name: {@code sendNotificationEmail}
      */
     @ActivityMethod
+    @ActivityMeta(description = "Sends a digital message email notification",
+            inputKeys = {"to", "message", "taskName", "workflowId"})
     Object sendNotificationEmail(Map<String, Object> input);
 
     /**
@@ -36,6 +38,8 @@ public interface NotificationActivities {
      * Activity name: {@code sendNotificationSms}
      */
     @ActivityMethod
+    @ActivityMeta(description = "Sends a digital message SMS notification",
+            inputKeys = {"phone", "message", "taskName", "workflowId"})
     Object sendNotificationSms(Map<String, Object> input);
 
     /**
@@ -43,5 +47,7 @@ public interface NotificationActivities {
      * Activity name: {@code sendNotificationCall}
      */
     @ActivityMethod
+    @ActivityMeta(description = "Sends a digital message phone notification",
+            inputKeys = {"phone", "message", "taskName", "workflowId"})
     Object sendNotificationCall(Map<String, Object> input);
 }

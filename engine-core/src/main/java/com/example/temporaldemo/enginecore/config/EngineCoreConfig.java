@@ -1,6 +1,6 @@
 package com.example.temporaldemo.enginecore.config;
 
-import com.example.temporaldemo.engine.workflow.HumanTaskWorkflowImpl;
+import com.example.temporaldemo.engine.workflow.DigitalMessageWorkflowImpl;
 import com.example.temporaldemo.engine.workflow.OrchestratorWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
@@ -50,7 +50,7 @@ public class EngineCoreConfig {
         Worker worker = factory.newWorker(taskQueue);
         worker.registerWorkflowImplementationTypes(
                 OrchestratorWorkflowImpl.class,
-                HumanTaskWorkflowImpl.class);
+                DigitalMessageWorkflowImpl.class);
         logger.info("Engine Worker registered (workflow only). Task queue: {}", taskQueue);
         return factory;
     }

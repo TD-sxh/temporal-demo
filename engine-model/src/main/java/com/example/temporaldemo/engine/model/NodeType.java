@@ -20,6 +20,6 @@ public enum NodeType {
     LOOP,
     /** Waits for a fixed duration before continuing */
     DELAY,
-    /** Human task node: sends notifications (SMS/Email/Phone) and waits for a manual signal */
-    HUMAN_TASK
+    /** Digital message node: sends digital notifications (EMAIL/SMS) and waits for a manual action signal */
+    DIGITAL_MESSAGE
 }
